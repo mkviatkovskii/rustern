@@ -97,6 +97,8 @@ jobs:
           [[ -e /dev/fuse ]] || sudo modprobe fuse
           echo user_allow_other | sudo tee -a /etc/fuse.conf
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          # Ubuntu's fusermount3 AppArmor profile denies mounts under the workspace.
+          if [[ -e /etc/apparmor.d/fusermount3 ]]; then sudo apparmor_parser -R /etc/apparmor.d/fusermount3; fi
       - uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           build-warnings: warn
@@ -116,6 +118,9 @@ jobs:
         with:
           tool: cargo-nextest,cargo-deny,cargo-llvm-cov,cargo-fuzz
       - run: scripts/gate.sh
+      - name: AppArmor denials
+        if: failure()
+        run: sudo dmesg | grep -i 'apparmor="DENIED"' || true
       - name: Cluster log
         if: failure()
         uses: actions/upload-artifact@v7
