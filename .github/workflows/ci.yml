@@ -65,7 +65,7 @@ jobs:
         with:
           go-version-file: tools/go.mod
           cache-dependency-path: tools/go.mod
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.3 # no major tags since v8
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest,cargo-deny
@@ -114,7 +114,7 @@ jobs:
         with:
           go-version-file: tools/go.mod
           cache-dependency-path: tools/go.mod
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.3 # no major tags since v8
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest,cargo-deny,cargo-llvm-cov,cargo-fuzz
