@@ -1,0 +1,28 @@
+[package]
+name = "rustern-fuse"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "FUSE adapter over rustern-client"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+rustern-client.workspace = true
+rustern-core.workspace = true
+rustern-msgs.workspace = true
+bytes.workspace = true
+dashmap.workspace = true
+fuser.workspace = true
+futures-util.workspace = true
+metrics.workspace = true
+rustix.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+metrics-exporter-prometheus.workspace = true
+tracing-subscriber.workspace = true
