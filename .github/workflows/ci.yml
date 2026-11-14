@@ -74,15 +74,22 @@ jobs:
       - name: Upstream pin
         id: pin
         run: echo "rev=$(git rev-parse HEAD:ternfs)" >>"$GITHUB_OUTPUT"
-      - name: Upstream binaries (cache)
+      # Restore and save separately: the build (about 10 min) is cached even when the gate fails.
+      - name: Upstream binaries (restore)
         id: upstream
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: ternfs/build/alpine
           key: ternfs-alpine-${{ steps.pin.outputs.rev }}
       - name: Upstream binaries (build)
         if: steps.upstream.outputs.cache-hit != 'true'
         run: MAKE_PARALLELISM=$(nproc) ternfs/build.sh alpine
+      - name: Upstream binaries (save)
+        if: steps.upstream.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ternfs/build/alpine
+          key: ternfs-alpine-${{ steps.pin.outputs.rev }}
       - name: FUSE and user namespaces
         # allow_other is mandatory for rustern; the namespace test covers unmounting as root.
         run: |
