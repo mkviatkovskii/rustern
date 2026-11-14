@@ -1,0 +1,7 @@
+# Python helpers (scripts/, .claude/hooks/); checked by scripts/gate.sh.
+line-length = 100
+target-version = "py312"
+extend-exclude = ["ternfs", ".specify"]
+
+[lint]
+extend-select = ["B", "I", "UP"]

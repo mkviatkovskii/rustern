@@ -6,36 +6,83 @@ cd "$(dirname "$0")/.."
 QUICK=0
 [[ ${1:-} == --quick ]] && QUICK=1
 
-need() { command -v "$1" >/dev/null || { echo "gate: missing required tool: $1" >&2; exit 1; }; }
-need cargo; need cargo-nextest; need cargo-deny; need go; need fusermount3
-(( QUICK )) || { need cargo-fuzz; need cargo-llvm-cov; }
+need() { command -v "$1" >/dev/null || {
+  echo "gate: missing required tool: $1" >&2
+  exit 1
+}; }
+need cargo
+need cargo-nextest
+need cargo-deny
+need go
+need fusermount3
+# CI runs shellcheck in its own step, which annotates the diff.
+[[ -n ${GITHUB_ACTIONS:-} ]] || need shellcheck
+need uvx
+((QUICK)) || {
+  need cargo-fuzz
+  need cargo-llvm-cov
+}
 
-step() { printf '\n== %s\n' "$*"; }
+# Under GitHub Actions each step is a collapsible group in the log.
+if [[ -n ${GITHUB_ACTIONS:-} ]]; then
+  step() { printf '::endgroup::\n::group::%s\n' "$*"; }
+else
+  step() { printf '\n== %s\n' "$*"; }
+fi
 
 step "upstream pin"
 head=$(git -C ternfs rev-parse HEAD)
-[[ $head == 5550891* ]] || { echo "gate: ternfs/ is at $head, expected 5550891" >&2; exit 1; }
+pin=$(<.ternfs-rev)
+[[ $head == "$pin" ]] || {
+  echo "gate: ternfs/ is at $head, expected $pin (.ternfs-rev)" >&2
+  exit 1
+}
 
-step "fmt";    cargo fmt --all --check
-step "clippy"; cargo clippy --workspace --all-targets -- -D warnings
-step "tests";  cargo nextest run --workspace --no-tests=warn
-step "deny";   cargo deny --log-level error check
+step "fmt"
+cargo fmt --all --check
+step "scripts"
+[[ -n ${GITHUB_ACTIONS:-} ]] || shellcheck scripts/*.sh
+go run mvdan.cc/sh/v3/cmd/shfmt@v3.14.1 -d scripts/*.sh
+uvx ruff@0.17.5 check --quiet scripts .claude/hooks
+uvx ruff@0.17.5 format --check --quiet scripts .claude/hooks
+python3 -I .claude/hooks/test_prefer_serena.py
+step "clippy"
+cargo clippy --workspace --all-targets -- -D warnings
+step "tests"
+cargo nextest run --workspace --no-tests=warn
+step "deny"
+cargo deny --log-level error check
 
 step "codec drift"
 gen=crates/rustern-msgs/src/generated.rs
-tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-(cd tools && go run ./rsgen) > "$tmp/generated.rs"
-diff -u "$gen" "$tmp/generated.rs" || { echo "gate: $gen is stale; rerun tools/rsgen" >&2; exit 1; }
+tmp=$(mktemp -d)
+started=0 # set when this gate starts the cluster, so that it stops it again
+on_exit() {
+  rm -rf "$tmp"
+  if ((started)); then scripts/cluster.sh stop; fi
+}
+trap on_exit EXIT
+(cd tools && go run ./rsgen) >"$tmp/generated.rs"
+diff -u "$gen" "$tmp/generated.rs" || {
+  echo "gate: $gen is stale; rerun tools/rsgen" >&2
+  exit 1
+}
 (cd tools && go run ./goldens "$tmp/goldens")
-diff -r testdata/goldens "$tmp/goldens" >/dev/null \
-  || { echo "gate: testdata/goldens is stale; rerun tools/goldens" >&2; exit 1; }
+diff -r testdata/goldens "$tmp/goldens" >/dev/null ||
+  {
+    echo "gate: testdata/goldens is stale; rerun tools/goldens" >&2
+    exit 1
+  }
 
 step "dependency direction"
-users=$(cargo tree -e normal -i fuser --workspace --prefix none 2>/dev/null \
-  | awk '{print $1}' | grep '^rustern' | sort -u | tr '\n' ' ' || true)
+users=$(cargo tree -e normal -i fuser --workspace --prefix none 2>/dev/null |
+  awk '{print $1}' | grep '^rustern' | sort -u | tr '\n' ' ' || true)
 case $users in
-  ""|"rustern "|"rustern rustern-fuse "|"rustern-fuse ") ;;
-  *) echo "gate: fuser reachable from: $users (only rustern-fuse and rustern allowed)" >&2; exit 1 ;;
+  "" | "rustern " | "rustern rustern-fuse " | "rustern-fuse ") ;;
+  *)
+    echo "gate: fuser reachable from: $users (only rustern-fuse and rustern allowed)" >&2
+    exit 1
+    ;;
 esac
 
 step "deviation tests exist"
@@ -47,20 +94,40 @@ while IFS= read -r ref; do
   ref=${ref//\`/}
   file=${ref%%.rs::*}.rs
   rest=${ref#*.rs::}
-  if [[ $rest == *"{"* ]]; then names=${rest#*\{}; names=${names%\}}; else names=${rest##*::}; fi
+  if [[ $rest == *"{"* ]]; then
+    names=${rest#*\{}
+    names=${names%\}}
+  else names=${rest##*::}; fi
   for name in ${names//,/ }; do
-    grep -qE "fn ${name}\(" "$file" 2>/dev/null \
-      || { echo "gate: docs/deviations.md names $file::$name, which does not exist" >&2; missing=1; }
+    grep -qE "fn ${name}\(" "$file" 2>/dev/null ||
+      {
+        echo "gate: docs/deviations.md names $file::$name, which does not exist" >&2
+        missing=1
+      }
   done
 done < <(grep -oE '`crates/[^`]+\.rs::[^`]+`' docs/deviations.md)
-(( missing == 0 )) || exit 1
+((missing == 0)) || exit 1
 
-(( QUICK )) && { step "quick gate passed"; exit 0; }
+((QUICK)) && {
+  step "quick gate passed"
+  exit 0
+}
+
+step "fuzz smoke"
+# Every target briefly, from its checked-in corpus; new inputs go to a scratch directory.
+for t in crates/*/fuzz/fuzz_targets/*.rs; do
+  crate=${t%%/fuzz/*}
+  name=$(basename "$t" .rs)
+  mkdir -p "$tmp/fuzz/$name"
+  (cd "$crate" && cargo +nightly fuzz run "$name" "$tmp/fuzz/$name" "fuzz/corpus/$name" -- \
+    -max_total_time="${RUSTERN_FUZZ_SECONDS:-20}" -print_final_stats=0)
+done
 
 step "cluster"
-started=0
-if ! scripts/cluster.sh status; then scripts/cluster.sh start; started=1; fi
-trap 'rm -rf "$tmp"; (( started )) && scripts/cluster.sh stop; true' EXIT
+if ! scripts/cluster.sh status; then
+  scripts/cluster.sh start
+  started=1
+fi
 data=${RUSTERN_TEST_DATA_DIR:-ternfs/mnt}
 [[ -d $data/fuse_loc1/mnt/corpus ]] || scripts/make-corpus.sh "$data/fuse_loc1/mnt/corpus"
 
@@ -81,3 +148,4 @@ step "coverage"
 cargo llvm-cov report --summary-only --fail-under-lines "${RUSTERN_COVERAGE_FLOOR:-98}"
 
 step "gate passed"
+[[ -z ${GITHUB_ACTIONS:-} ]] || echo "::endgroup::"

@@ -32,7 +32,9 @@ start a local cluster, write the test corpus, mount with
 cargo run --release -p rustern -- -registry 127.0.0.1:10001 /tmp/rustern-mnt
 ```
 
-and run the gates with `scripts/gate.sh`.
+and run the gates with `scripts/gate.sh` (`--quick` skips the fuzz smoke, the cluster suites
+and coverage). CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs the same script
+in both modes; the upstream checkout is pinned in `.ternfs-rev`.
 
 ## Licence
 

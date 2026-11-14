@@ -1,0 +1,134 @@
+# Runs scripts/gate.sh, the same merge gate as locally:
+#   quick: lints, unit tests, cargo-deny, codec drift (no cluster)
+#   full:  everything, plus fuzz smoke, the cluster and fault suites against a local
+#          upstream cluster, and the coverage floor
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+  TERNFS_REPO: https://github.com/xtxmarkets/ternfs
+
+jobs:
+  quick:
+    # Debian, as on the developers' machines. GitHub hosts no Debian runners, so it is a
+    # container; the full job needs the VM itself (FUSE, namespaces, Docker, sysctls).
+    runs-on: ubuntu-26.04
+    container: debian:trixie
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      checks: write # shellcheck annotations
+      pull-requests: write # shellcheck review comments
+    steps:
+      - name: Base packages
+        run: |
+          apt-get update -q
+          apt-get install -yq --no-install-recommends \
+            build-essential ca-certificates curl fuse3 git python3 xz-utils
+          curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >>"$GITHUB_PATH"
+      - uses: actions/checkout@v7
+      - name: Upstream checkout at the pin
+        run: |
+          git init -q ternfs
+          git -C ternfs fetch -q --depth 1 "$TERNFS_REPO" "$(<.ternfs-rev)"
+          git -C ternfs checkout -q FETCH_HEAD
+      # Under Actions the gate leaves shellcheck (0.11.0) to this step: inline review
+      # comments on pull requests, check annotations on pushes; any finding fails the job.
+      - uses: reviewdog/action-shellcheck@v1.35.1
+        with:
+          reporter: ${{ github.event_name == 'pull_request' && 'github-pr-review' || 'github-check' }}
+          path: scripts
+          level: info
+          filter_mode: nofilter
+          fail_level: any
+      - name: Rust toolchain
+        run: rustup toolchain install
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: tools/go.mod
+          cache-dependency-path: tools/go.mod
+      - uses: astral-sh/setup-uv@v10
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest,cargo-deny
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/gate.sh --quick
+
+  full:
+    runs-on: ubuntu-26.04
+    # The first run on a new pin also builds upstream (cached afterwards).
+    timeout-minutes: 150
+    steps:
+      - name: Free disk space
+        # The cluster wants 20 GB free; the runner image's SDKs take most of the disk.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - uses: actions/checkout@v7
+      - name: Upstream checkout at the pin
+        run: |
+          git init -q ternfs
+          git -C ternfs fetch -q --depth 1 "$TERNFS_REPO" "$(<.ternfs-rev)"
+          git -C ternfs checkout -q FETCH_HEAD
+          echo "TERNFS_REV=$(<.ternfs-rev)" >>"$GITHUB_ENV"
+      - name: Upstream binaries (cache)
+        id: upstream
+        uses: actions/cache@v6
+        with:
+          path: ternfs/build/alpine
+          key: ternfs-alpine-${{ env.TERNFS_REV }}
+      - name: Upstream binaries (build)
+        if: steps.upstream.outputs.cache-hit != 'true'
+        run: MAKE_PARALLELISM=$(nproc) ternfs/build.sh alpine
+      - name: FUSE and user namespaces
+        # allow_other is mandatory for rustern; the namespace test covers unmounting as root.
+        run: |
+          sudo apt-get update -q && sudo apt-get install -yq fuse3
+          [[ -e /dev/fuse ]] || sudo modprobe fuse
+          echo user_allow_other | sudo tee -a /etc/fuse.conf
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Tools
+        run: |
+          rustup toolchain install
+          rustup component add llvm-tools-preview
+          rustup toolchain install nightly --profile minimal
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: tools/go.mod
+          cache-dependency-path: tools/go.mod
+      - uses: astral-sh/setup-uv@v10
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest,cargo-deny,cargo-llvm-cov,cargo-fuzz
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            crates/rustern-msgs/fuzz
+            crates/rustern-client/fuzz
+      - run: scripts/gate.sh
+      - name: Cluster log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ternrun-log
+          path: ternfs/ternrun.log
+          if-no-files-found: ignore

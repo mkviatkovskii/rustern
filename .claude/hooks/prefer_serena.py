@@ -40,7 +40,9 @@ WRAPPERS = {"sudo", "time", "nice", "command", "env", "xargs", "timeout"}
 SEPARATORS = {"|", "||", "&&", ";", "&", "|&", "(", ")", "\n"}
 GLOB_CHARS = "*?["
 
-INTERPRETER_RE = re.compile(r"^(python[\d.]*|pypy[\d.]*|perl|ruby|node|nodejs|deno|bun|php|lua[\d.]*)$")
+INTERPRETER_RE = re.compile(
+    r"^(python[\d.]*|pypy[\d.]*|perl|ruby|node|nodejs|deno|bun|php|lua[\d.]*)$"
+)
 INLINE_FLAGS = {"-c", "-e", "-E", "-n", "-p", "-", "--eval", "--print", "-r"}
 SHELLS = {"bash", "sh", "zsh", "dash"}
 READ_MAX_LINES = 150
@@ -52,7 +54,9 @@ LITERAL_RE = re.compile(r"""(['"])([^'"\n]+?)\1""")
 # A literal is used as a path when it follows open( / Path( / an assignment / a list bracket or comma
 # (p='crates/x.rs', open(f'crates/{m}.rs'), ['a.rs', 'b.rs']) - not when it's a replace()/`in` argument.
 PATH_USE_RE = re.compile(r"""(?:\bopen\(|\bPath\(|(?<![=!<>])=|\[|\[[^\]()]*,)\s*[rbfRBF]{0,2}$""")
-WALK_RE = re.compile(r"(?:walk|glob|rglob|listdir|scandir|iterdir|Path|readdirSync|opendir)\s*\(\s*[rbf]?['\"]([^'\"]+)['\"]")
+WALK_RE = re.compile(
+    r"(?:walk|glob|rglob|listdir|scandir|iterdir|Path|readdirSync|opendir)\s*\(\s*[rbf]?['\"]([^'\"]+)['\"]"
+)
 
 SERENA_HINT = (
     "Switch to Serena (mcp__serena__serena_repl; load it via ToolSearch "
@@ -98,7 +102,7 @@ def is_code_ext(s):
 
 def has_ext(s):
     base = s.rstrip("'\"").rsplit("/", 1)[-1].lstrip("*")
-    return "." in base.strip(".")  or (base.startswith(".") and len(base) > 1)
+    return "." in base.strip(".") or (base.startswith(".") and len(base) > 1)
 
 
 def resolve(arg, cwd):
@@ -158,17 +162,22 @@ def filters_verdict(globs, types):
 
 
 def deny(reason):
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason + " " + SERENA_HINT,
-        }
-    }))
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason + " " + SERENA_HINT,
+                }
+            }
+        )
+    )
     sys.exit(0)
 
 
 # ---------------------------------------------------------------- Grep tool
+
 
 def check_grep_tool(inp, cwd):
     path = inp.get("path") or cwd
@@ -183,13 +192,52 @@ def check_grep_tool(inp, cwd):
 
 # ---------------------------------------------------------------- Bash
 
-GREP_VALUE_OPTS = {"-e", "-f", "-A", "-B", "-C", "-m", "-d", "-D", "--regexp", "--file",
-                   "--max-count", "--context", "--after-context", "--before-context",
-                   "--exclude", "--exclude-dir", "--label", "--color", "--colour"}
-RG_VALUE_OPTS = GREP_VALUE_OPTS | {"-g", "--glob", "--iglob", "-t", "--type", "-T", "--type-not",
-                                   "-j", "--threads", "-M", "--max-columns", "-E", "--encoding",
-                                   "--sort", "--sortr", "-r", "--replace", "--pre", "--type-add",
-                                   "--max-depth", "-d", "--ignore-file", "--path-separator"}
+GREP_VALUE_OPTS = {
+    "-e",
+    "-f",
+    "-A",
+    "-B",
+    "-C",
+    "-m",
+    "-d",
+    "-D",
+    "--regexp",
+    "--file",
+    "--max-count",
+    "--context",
+    "--after-context",
+    "--before-context",
+    "--exclude",
+    "--exclude-dir",
+    "--label",
+    "--color",
+    "--colour",
+}
+RG_VALUE_OPTS = GREP_VALUE_OPTS | {
+    "-g",
+    "--glob",
+    "--iglob",
+    "-t",
+    "--type",
+    "-T",
+    "--type-not",
+    "-j",
+    "--threads",
+    "-M",
+    "--max-columns",
+    "-E",
+    "--encoding",
+    "--sort",
+    "--sortr",
+    "-r",
+    "--replace",
+    "--pre",
+    "--type-add",
+    "--max-depth",
+    "-d",
+    "--ignore-file",
+    "--path-separator",
+}
 
 
 def parse_search(cmd, args):
@@ -203,7 +251,7 @@ def parse_search(cmd, args):
     while i < len(args):
         a = args[i]
         if a == "--":
-            paths.extend(args[i + 1:])
+            paths.extend(args[i + 1 :])
             break
         if a.startswith("--"):
             name, _, val = a.partition("=")
@@ -225,7 +273,7 @@ def parse_search(cmd, args):
                 if is_grep and ch in "rR":
                     recursive = True
                 if opt in value_opts:
-                    val = flags[j + 1:]
+                    val = flags[j + 1 :]
                     if not val:
                         i += 1
                         val = args[i] if i < len(args) else ""
@@ -253,8 +301,15 @@ def parse_find(cmd, args):
             paths.append(args[i])
             i += 1
         while i < len(args):
-            if args[i] in ("-name", "-iname", "-path", "-ipath", "-wholename", "-regex", "-iregex") \
-                    and i + 1 < len(args):
+            if args[i] in (
+                "-name",
+                "-iname",
+                "-path",
+                "-ipath",
+                "-wholename",
+                "-regex",
+                "-iregex",
+            ) and i + 1 < len(args):
                 names.append(args[i + 1])
                 i += 1
             i += 1
@@ -269,9 +324,29 @@ def parse_find(cmd, args):
             i += 1
         elif a.startswith("--extension="):
             names.append("*." + a.split("=", 1)[1].lstrip("."))
-        elif a in ("-t", "--type", "-d", "--max-depth", "-E", "--exclude", "-j", "--threads",
-                   "-x", "--exec", "-X", "--exec-batch", "-c", "--color", "--base-directory",
-                   "-S", "--size", "--changed-within", "--changed-before", "-o", "--owner"):
+        elif a in (
+            "-t",
+            "--type",
+            "-d",
+            "--max-depth",
+            "-E",
+            "--exclude",
+            "-j",
+            "--threads",
+            "-x",
+            "--exec",
+            "-X",
+            "--exec-batch",
+            "-c",
+            "--color",
+            "--base-directory",
+            "-S",
+            "--size",
+            "--changed-within",
+            "--changed-before",
+            "-o",
+            "--owner",
+        ):
             i += 1
         elif not a.startswith("-"):
             positional.append(a)
@@ -328,7 +403,7 @@ def is_inline_interpreter(cmd, args):
     for a in args:
         if a in INLINE_FLAGS or (a.startswith("-") and not a.startswith("--") and a[-1] in "ceE"):
             return True
-        if a.startswith("<<") or a.startswith("<"):
+        if a.startswith("<"):
             return True  # stdin / heredoc with no script file
         if not a.startswith("-"):
             return False  # first positional is a script file
@@ -339,12 +414,19 @@ def interpreter_code_refs(text, cwd):
     """Code paths an inline script actually opens: whole string literals ('crates/x.rs',
     f'crates/{m}.rs'), bare shell args (perl -pi -e ... crates/x.rs) and directory walks.
     Paths merely mentioned inside longer text (e.g. a tasks.md line being edited) don't count."""
-    hits = [m.group(2) for m in LITERAL_RE.finditer(text)
-            if CODE_REF_RE.fullmatch(m.group(2)) and PATH_USE_RE.search(text[:m.start()])
-            and path_is_code(m.group(2), cwd)]
+    hits = [
+        m.group(2)
+        for m in LITERAL_RE.finditer(text)
+        if CODE_REF_RE.fullmatch(m.group(2))
+        and PATH_USE_RE.search(text[: m.start()])
+        and path_is_code(m.group(2), cwd)
+    ]
     shell_part = text.split("<<", 1)[0]
-    hits += [w for w in (w.strip("'\";|&()") for w in shell_part.split())
-             if is_code_ext(w) and path_is_code(w, cwd)]
+    hits += [
+        w
+        for w in (w.strip("'\";|&()") for w in shell_part.split())
+        if is_code_ext(w) and path_is_code(w, cwd)
+    ]
     hits += [m.group(1) for m in WALK_RE.finditer(text) if path_is_code(m.group(1), cwd)]
     return hits
 
@@ -352,15 +434,18 @@ def interpreter_code_refs(text, cwd):
 def check_interpreter(cmd, command, cwd):
     hits = interpreter_code_refs(command, cwd)
     if hits:
-        deny(f"Inline `{cmd}` code touching Rust/Go code ({', '.join(sorted(set(hits))[:3])}) is blocked.")
+        deny(
+            f"Inline `{cmd}` code touching Rust/Go code ({', '.join(sorted(set(hits))[:3])}) is blocked."
+        )
 
 
 def raw_scan(command, cwd):
     """Fallback when shlex can't parse the command (unbalanced quotes in a heredoc, ...)."""
     words = set(re.findall(r"(?:^|[\s;&|(])([\w.\-/]+)", command))
     names = {os.path.basename(w) for w in words}
-    risky = (names & (SEARCH_CMDS | FIND_CMDS | READ_CMDS | SHELLS | {"eval"})
-             or any(INTERPRETER_RE.match(n) for n in names))
+    risky = names & (SEARCH_CMDS | FIND_CMDS | READ_CMDS | SHELLS | {"eval"}) or any(
+        INTERPRETER_RE.match(n) for n in names
+    )
     if any(INTERPRETER_RE.match(n) for n in names):
         hits = interpreter_code_refs(command, cwd)
     else:
@@ -380,12 +465,14 @@ def check_git(args, cwd):
         i += 1
     if i >= len(args) or args[i] != "grep":
         return
-    paths, globs, types, _ = parse_search("grep", args[i + 1:])
+    paths, globs, types, _ = parse_search("grep", args[i + 1 :])
     verdict = filters_verdict(globs + [p for p in paths if any(c in p for c in GLOB_CHARS)], types)
     if verdict == "noncode":
         return
     paths = paths or ["."]
-    if (verdict == "code" and any(in_project(p, cwd) for p in paths)) or any(path_is_code(p, cwd) for p in paths):
+    if (verdict == "code" and any(in_project(p, cwd) for p in paths)) or any(
+        path_is_code(p, cwd) for p in paths
+    ):
         deny("`git grep` over Rust/Go code is blocked.")
 
 
@@ -431,24 +518,31 @@ def check_bash(command, cwd, depth=0):
                 if piped or not recursive:
                     continue  # searching stdin (command output)
                 paths = ["."]
-            if (verdict == "code" and any(in_project(p, cwd) for p in paths)) or any(path_is_code(p, cwd) for p in paths):
+            if (verdict == "code" and any(in_project(p, cwd) for p in paths)) or any(
+                path_is_code(p, cwd) for p in paths
+            ):
                 deny(f"`{cmd}` over Rust/Go code is blocked.")
 
         elif cmd in FIND_CMDS:
             paths, names = parse_find(cmd, args)
             if names and all(has_ext(n) and not is_code_ext(n) for n in names):
                 continue
-            if (any(is_code_ext(n) for n in names) and any(in_project(p, cwd) for p in paths)) \
-                    or any(path_is_code(p, cwd) for p in paths):
-                deny(f"`{cmd}` over Rust/Go code is blocked (the Glob tool or "
-                     "s.fs.find_file / s.fs.list_dir are fine for locating files).")
+            if (
+                any(is_code_ext(n) for n in names) and any(in_project(p, cwd) for p in paths)
+            ) or any(path_is_code(p, cwd) for p in paths):
+                deny(
+                    f"`{cmd}` over Rust/Go code is blocked (the Glob tool or "
+                    "s.fs.find_file / s.fs.list_dir are fine for locating files)."
+                )
 
-        elif cmd in READ_CMDS:
-            if any(is_code_ext(a) and path_is_code(a, cwd) for a in args if not a.startswith("-")):
-                deny(f"Reading/editing Rust/Go code with `{cmd}` is blocked.")
+        elif cmd in READ_CMDS and any(
+            is_code_ext(a) and path_is_code(a, cwd) for a in args if not a.startswith("-")
+        ):
+            deny(f"Reading/editing Rust/Go code with `{cmd}` is blocked.")
 
 
 # ---------------------------------------------------------------- Read tool
+
 
 def check_read_tool(inp, cwd):
     path = inp.get("file_path") or ""
@@ -464,10 +558,12 @@ def check_read_tool(inp, cwd):
         return
     if lines - (inp.get("offset") or 1) + 1 <= READ_MAX_LINES:
         return
-    deny(f"Reading {rel_to_root(os.path.realpath(path))} whole ({lines} lines) is blocked. "
-         f"Find what you need with s.lsp.get_symbols_overview / s.lsp.find_symbol(include_body=True); "
-         f"for surrounding lines use Read with offset and limit <= {READ_MAX_LINES} "
-         f"(that also satisfies Edit's read-before-edit check).")
+    deny(
+        f"Reading {rel_to_root(os.path.realpath(path))} whole ({lines} lines) is blocked. "
+        f"Find what you need with s.lsp.get_symbols_overview / s.lsp.find_symbol(include_body=True); "
+        f"for surrounding lines use Read with offset and limit <= {READ_MAX_LINES} "
+        f"(that also satisfies Edit's read-before-edit check)."
+    )
 
 
 def main():
@@ -484,8 +580,8 @@ def main():
             check_read_tool(inp, cwd)
     except SystemExit:
         raise
-    except Exception:
-        pass  # fail open
+    except Exception:  # noqa: BLE001, S110 - a hook bug must not block the session: fail open
+        pass
     sys.exit(0)
 
 

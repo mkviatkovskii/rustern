@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2317  # cleanup, killtree and unmount run from traps
+# shellcheck disable=SC2317,SC2329  # cleanup, killtree and unmount run from traps
 # Long stability run (T125): correctness, memory and performance of a Rustern mount over
 # hours, on a loopback network shaped with `tc netem`, without root.
 #
@@ -48,7 +48,7 @@ ROOT=$PWD
 
 hours=${1:-8}
 phase_min=${PHASE_MIN:-30}
-read -r -a phases <<< "${PHASES:-clean delay lossy harsh stall}"
+read -r -a phases <<<"${PHASES:-clean delay lossy harsh stall}"
 perf_s=${PERF_SECONDS:-45}
 pass_grace=${PASS_GRACE:-300}
 compare=${COMPARE:-1}
@@ -59,12 +59,18 @@ registry=127.0.0.1:10001
 BIN=$ROOT/ternfs/build/alpine
 big=corpus/sizes/size_1073741824
 
-need() { command -v "$1" >/dev/null || { echo "overnight: missing required tool: $1" >&2; exit 1; }; }
+need() { command -v "$1" >/dev/null || {
+  echo "overnight: missing required tool: $1" >&2
+  exit 1
+}; }
 
 # ---- outside the namespace: build, stop the host cluster, run, restart, report ----
 if [[ ${RUSTERN_OVERNIGHT_INSIDE:-} != 1 ]]; then
   for t in unshare tc ip fio fusermount3 python3 sha256sum cargo; do need "$t"; done
-  [[ -x $BIN/ternrun && -x $BIN/ternfuse ]] || { echo "overnight: build upstream first" >&2; exit 1; }
+  [[ -x $BIN/ternrun && -x $BIN/ternfuse ]] || {
+    echo "overnight: build upstream first" >&2
+    exit 1
+  }
   cargo build --release -q -p rustern
   dir=$ROOT/target/overnight/$(date +%Y%m%d-%H%M%S)
   mkdir -p "$dir"
@@ -84,12 +90,15 @@ if [[ ${RUSTERN_OVERNIGHT_INSIDE:-} != 1 ]]; then
   rc=0
   while :; do
     if wait "$upid"; then rc=0; else rc=$?; fi
-    kill -0 "$upid" 2>/dev/null || break   # still running: wait was cut short by a signal
+    kill -0 "$upid" 2>/dev/null || break # still running: wait was cut short by a signal
   done
   trap - INT TERM
   echo "overnight: inner half exited with $rc"
-  if (( host_up )); then scripts/cluster.sh start || echo "overnight: host cluster did not restart" >&2; fi
-  if [[ -f $dir/report.md ]]; then cat "$dir/report.md" >> "$out"; cat "$dir/report.md"; fi
+  if ((host_up)); then scripts/cluster.sh start || echo "overnight: host cluster did not restart" >&2; fi
+  if [[ -f $dir/report.md ]]; then
+    cat "$dir/report.md" >>"$out"
+    cat "$dir/report.md"
+  fi
   echo "overnight: results in $dir"
   exit "$rc"
 fi
@@ -104,7 +113,10 @@ log() { echo "$(date +%T) $*" | tee -a "$dir/events"; }
 unmount() { # no `return` here: in a function called from the EXIT trap it ends the trap
   local n=0
   until fusermount3 -u "$1" 2>/dev/null; do
-    if (( ++n == 50 )); then fusermount3 -uz "$1" || true; break; fi
+    if ((++n == 50)); then
+      fusermount3 -uz "$1" || true
+      break
+    fi
     sleep 0.1
   done
 }
@@ -117,21 +129,24 @@ killtree() { # <pid>: the process first, so a loop cannot start new children
 cleaned=0
 cleanup() {
   # Once, and in the main shell only, whatever else ends up running the EXIT trap.
-  [[ $BASHPID == "$$" ]] && (( !cleaned )) || return 0
+  [[ $BASHPID == "$$" ]] && ((! cleaned)) || return 0
   cleaned=1
   trap '' INT TERM
   local j js
   js=$(jobs -p)
   log "cleanup: stopping jobs"
   for j in $js; do [[ $j == "$pid" || $j == "$tpid" ]] || killtree "$j"; done
-  if [[ -f $dir/stopped ]]; then xargs -r kill -CONT < "$dir/stopped" 2>/dev/null || true; fi
+  if [[ -f $dir/stopped ]]; then xargs -r kill -CONT <"$dir/stopped" 2>/dev/null || true; fi
   tc qdisc del dev lo root 2>/dev/null || true
-  [[ -n $pid ]] && { kill -TERM "$pid" 2>/dev/null; wait "$pid" 2>/dev/null || true; }
+  [[ -n $pid ]] && {
+    kill -TERM "$pid" 2>/dev/null
+    wait "$pid" 2>/dev/null || true
+  }
   mountpoint -q "$mnt" && unmount "$mnt"
   mountpoint -q "$tmnt" && unmount "$tmnt"
   [[ -n $tpid ]] && { kill -TERM "$tpid" 2>/dev/null || true; }
   log "cleanup: clients stopped; stopping the cluster"
-  scripts/cluster.sh stop >> "$dir/cluster.log" 2>&1 || true
+  scripts/cluster.sh stop >>"$dir/cluster.log" 2>&1 || true
   log "cleanup: done"
 }
 trap cleanup EXIT
@@ -139,24 +154,39 @@ trap 'log "stopped by a signal"; exit 130' INT TERM
 
 ip link set lo up
 log "starting the cluster in the namespace"
-scripts/cluster.sh start >> "$dir/cluster.log" 2>&1
+scripts/cluster.sh start >>"$dir/cluster.log" 2>&1
 
 target/release/rustern -registry "$registry" -log-file "$dir/rustern.log" "$mnt" &
 pid=$!
-for _ in $(seq 100); do mountpoint -q "$mnt" && break; sleep 0.1; done
-mountpoint -q "$mnt" || { log "rustern did not mount"; exit 1; }
-if (( compare )); then
+for _ in $(seq 100); do
+  mountpoint -q "$mnt" && break
+  sleep 0.1
+done
+mountpoint -q "$mnt" || {
+  log "rustern did not mount"
+  exit 1
+}
+if ((compare)); then
   "$BIN/ternfuse" -log-file "$dir/ternfuse.log" -registry "$registry" "$tmnt" &
   tpid=$!
-  for _ in $(seq 100); do mountpoint -q "$tmnt" && break; sleep 0.1; done
-  mountpoint -q "$tmnt" || { log "ternfuse did not mount"; exit 1; }
+  for _ in $(seq 100); do
+    mountpoint -q "$tmnt" && break
+    sleep 0.1
+  done
+  mountpoint -q "$tmnt" || {
+    log "ternfuse did not mount"
+    exit 1
+  }
 fi
-[[ -f $mnt/corpus/corpus.sha256 ]] || { log "no corpus; run scripts/make-corpus.sh"; exit 1; }
+[[ -f $mnt/corpus/corpus.sha256 ]] || {
+  log "no corpus; run scripts/make-corpus.sh"
+  exit 1
+}
 listing() { # <mount> [time limit, s]
   (cd "$1/corpus" && timeout -k 10 "${2:-600}" find . -printf '%y %p %s\n' | LC_ALL=C sort)
 }
-listing "$mnt" > "$dir/listing.ref"
-log "mounted; corpus has $(wc -l < "$dir/listing.ref") entries"
+listing "$mnt" >"$dir/listing.ref"
+log "mounted; corpus has $(wc -l <"$dir/listing.ref") entries"
 
 mapfile -t blocks < <(pgrep -x ternblocks || true)
 mapfile -t shards < <(pgrep -x ternshard || true)
@@ -176,15 +206,16 @@ shape() { # <phase>
 
 # fio_job <phase> <cycle> <client> <mount> <label> <fio args...>: one JSON line to perf.jsonl.
 fio_job() {
-  local phase=$1 cycle=$2 client=$3 m=$4 label=$5 t0; shift 5
+  local phase=$1 cycle=$2 client=$3 m=$4 label=$5 t0
+  shift 5
   t0=$(date +%s)
   # In the background: bash runs a signal trap only once a foreground command ends.
   fio --output-format=json --readonly --direct=1 --invalidate=1 --ioengine=psync \
     --group_reporting --name="$label" --filename="$m/$big" --size=1G --time_based \
-    --runtime="$perf_s" "$@" > "$dir/fio.json" 2> "$dir/fio.err" &
+    --runtime="$perf_s" "$@" >"$dir/fio.json" 2>"$dir/fio.err" &
   if wait $!; then
-    python3 - "$phase" "$cycle" "$client" "$label" "$dir/fio.json" $(( $(date +%s) - t0 )) \
-      >> "$dir/perf.jsonl" <<'EOF'
+    python3 - "$phase" "$cycle" "$client" "$label" "$dir/fio.json" $(($(date +%s) - t0)) \
+      >>"$dir/perf.jsonl" <<'EOF'
 import json, sys
 phase, cycle, client, label, path, wall = sys.argv[1:]
 r = json.load(open(path))["jobs"][0]["read"]
@@ -196,16 +227,17 @@ print(json.dumps({"phase": phase, "cycle": int(cycle), "client": client, "label"
 EOF
   else
     printf '{"phase": "%s", "cycle": %s, "client": "%s", "label": "%s", "errors": 1}\n' \
-      "$phase" "$cycle" "$client" "$label" >> "$dir/perf.jsonl"
+      "$phase" "$cycle" "$client" "$label" >>"$dir/perf.jsonl"
     log "fio $label on $client failed: $(tail -1 "$dir/fio.err")"
   fi
 }
 
 perf_block() { # <phase> <cycle>
   local clients=(rustern) c
-  (( compare )) && { if (( $2 % 2 )); then clients=(ternfuse rustern); else clients=(rustern ternfuse); fi; }
+  ((compare)) && { if (($2 % 2)); then clients=(ternfuse rustern); else clients=(rustern ternfuse); fi; }
   for c in "${clients[@]}"; do
-    local m=$mnt; [[ $c == ternfuse ]] && m=$tmnt
+    local m=$mnt
+    [[ $c == ternfuse ]] && m=$tmnt
     fio_job "$1" "$2" "$c" "$m" seq-read-1 --rw=read --bs=1M --numjobs=1
     fio_job "$1" "$2" "$c" "$m" seq-read-16 --rw=read --bs=1M --numjobs=16
     fio_job "$1" "$2" "$c" "$m" rand-read-4k --rw=randread --bs=4k --numjobs=16
@@ -217,83 +249,94 @@ perf_block() { # <phase> <cycle>
 # <end> <wrong> <read errors> <listing ok> <incomplete>". The listing of a cut-off pass is
 # not compared.
 check_loop() { # <phase> <cycle> <end>
-  while (( $(date +%s) < $3 )); do
+  while (($(date +%s) < $3)); do
     local s e wrong ioerr lst=1 cut=0 rc=0
     s=$(date +%s)
-    (cd "$mnt/corpus" && exec timeout -k 10 $(( $3 + pass_grace - s )) \
-      sha256sum -c --quiet corpus.sha256) > "$dir/pass.out" 2>&1 || rc=$?
-    (( rc == 124 || rc == 137 )) && cut=1
-    if (( !cut )); then
+    (cd "$mnt/corpus" && exec timeout -k 10 $(($3 + pass_grace - s)) \
+      sha256sum -c --quiet corpus.sha256) >"$dir/pass.out" 2>&1 || rc=$?
+    ((rc == 124 || rc == 137)) && cut=1
+    if ((! cut)); then
       rc=0
-      listing "$mnt" $(( $3 + pass_grace - $(date +%s) > 10 ? $3 + pass_grace - $(date +%s) : 10 )) \
-        > "$dir/listing.now" 2>> "$dir/pass.out" || rc=$?
-      if (( rc == 124 || rc == 137 )); then cut=1
+      listing "$mnt" $(($3 + pass_grace - $(date +%s) > 10 ? $3 + pass_grace - $(date +%s) : 10)) \
+        >"$dir/listing.now" 2>>"$dir/pass.out" || rc=$?
+      if ((rc == 124 || rc == 137)); then
+        cut=1
       else cmp -s "$dir/listing.ref" "$dir/listing.now" || lst=0; fi
     fi
     e=$(date +%s)
     wrong=$(grep -c ': FAILED$' "$dir/pass.out" || true)
     ioerr=$(grep -cE 'FAILED open or read|Input/output error|No such file' "$dir/pass.out" || true)
-    if (( wrong || ioerr || !lst )); then
-      { echo "== $1 cycle $2 at $s"; head -50 "$dir/pass.out"; } >> "$dir/errors"
-      (( lst )) || diff "$dir/listing.ref" "$dir/listing.now" | head -20 >> "$dir/errors" || true
+    if ((wrong || ioerr || ! lst)); then
+      {
+        echo "== $1 cycle $2 at $s"
+        head -50 "$dir/pass.out"
+      } >>"$dir/errors"
+      ((lst)) || diff "$dir/listing.ref" "$dir/listing.now" | head -20 >>"$dir/errors" || true
     fi
     grep -qs 'Transport endpoint is not connected' "$dir/pass.out" && touch "$dir/enotconn"
-    (( cut )) && log "$1 cycle $2: checksum pass cut off after $(( e - s )) s"
-    echo "$1 $2 $s $e $wrong $ioerr $lst $cut" >> "$dir/passes"
+    ((cut)) && log "$1 cycle $2: checksum pass cut off after $((e - s)) s"
+    echo "$1 $2 $s $e $wrong $ioerr $lst $cut" >>"$dir/passes"
   done
 }
 
 fault_loop() { # <end>: SIGSTOP one block service and one shard for 10 s every 60 s
-  while (( $(date +%s) + 60 < $1 )); do
+  while (($(date +%s) + 60 < $1)); do
     sleep 50
     local b=${blocks[RANDOM % ${#blocks[@]}]} s=${shards[RANDOM % ${#shards[@]}]} t0
     t0=$(date +%s)
-    echo "$b $s" > "$dir/stopped"   # a subshell: cleanup reads the file, not a variable
+    echo "$b $s" >"$dir/stopped" # a subshell: cleanup reads the file, not a variable
     kill -STOP "$b" "$s"
     sleep 10
-    kill -CONT "$b" "$s"; rm -f "$dir/stopped"
-    echo "$t0 $(date +%s)" >> "$dir/faults"
+    kill -CONT "$b" "$s"
+    rm -f "$dir/stopped"
+    echo "$t0 $(date +%s)" >>"$dir/faults"
   done
 }
 
 sample() { # <phase> <cycle>: one line per daemon to samples.tsv
   local c p
   for c in rustern ternfuse; do
-    p=$pid; [[ $c == ternfuse ]] && p=$tpid
+    p=$pid
+    [[ $c == ternfuse ]] && p=$tpid
     [[ -n $p && -d /proc/$p ]] || continue
     echo "$(date +%s) $1 $2 $c $(awk '/^VmRSS/ {r=$2} /^VmHWM/ {h=$2} /^Threads/ {t=$2}
       END {print r, h, t}' "/proc/$p/status") $(awk '{print $14 + $15}' "/proc/$p/stat") \
-      $(find "/proc/$p/fd" -mindepth 1 -maxdepth 1 | wc -l)" >> "$dir/samples.tsv"
+      $(find "/proc/$p/fd" -mindepth 1 -maxdepth 1 | wc -l)" >>"$dir/samples.tsv"
   done
 }
 
 start=$(date +%s)
-end_all=$(( start + ${hours%.*} * 3600 ))
-[[ $hours == *.* ]] && end_all=$(( start + $(awk -v h="$hours" 'BEGIN {print int(h * 3600)}') ))
+end_all=$((start + ${hours%.*} * 3600))
+[[ $hours == *.* ]] && end_all=$((start + $(awk -v h="$hours" 'BEGIN {print int(h * 3600)}')))
 i=0 cycle=0
-while (( $(date +%s) + 120 < end_all )); do
+while (($(date +%s) + 120 < end_all)); do
   ph=${phases[i % ${#phases[@]}]}
-  (( i % ${#phases[@]} == 0 )) && cycle=$((cycle + 1))
-  pend=$(( $(date +%s) + phase_min * 60 )); (( pend > end_all )) && pend=$end_all
+  ((i % ${#phases[@]} == 0)) && cycle=$((cycle + 1))
+  pend=$(($(date +%s) + phase_min * 60))
+  ((pend > end_all)) && pend=$end_all
   log "phase $ph (cycle $cycle) until $(date -d "@$pend" +%T)"
   shape "$ph"
   perf_block "$ph" "$cycle"
-  load_s=$(( pend - $(date +%s) ))
-  if (( load_s > 30 )); then
+  load_s=$((pend - $(date +%s)))
+  if ((load_s > 30)); then
     fio --name=load --readonly --direct=1 --ioengine=psync --rw=randread --bs=128k \
       --filename="$mnt/$big" --size=1G --numjobs=4 --time_based --runtime="$load_s" \
-      --output="$dir/load.out" 2>> "$dir/load.err" &
+      --output="$dir/load.out" 2>>"$dir/load.err" &
     lpid=$!
     check_loop "$ph" "$cycle" "$pend" &
     cpid=$!
     fpid=
-    if [[ $ph == stall ]]; then fault_loop "$pend" & fpid=$!; fi
-    while (( $(date +%s) < pend )); do
+    if [[ $ph == stall ]]; then
+      fault_loop "$pend" &
+      fpid=$!
+    fi
+    while (($(date +%s) < pend)); do
       sample "$ph" "$cycle"
       kill -0 "$pid" 2>/dev/null || break
-      python3 scripts/overnight_report.py --status "$dir" "$start" "$end_all" > "$dir/status.tmp" \
-        && mv "$dir/status.tmp" "$dir/status"
-      sleep 10 & wait $!
+      python3 scripts/overnight_report.py --status "$dir" "$start" "$end_all" >"$dir/status.tmp" &&
+        mv "$dir/status.tmp" "$dir/status"
+      sleep 10 &
+      wait $!
     done
     wait "$cpid" "$lpid" ${fpid:+"$fpid"} 2>/dev/null || true
     grep -qs 'Transport endpoint is not connected' "$dir/load.err" && touch "$dir/enotconn"
@@ -301,14 +344,18 @@ while (( $(date +%s) + 120 < end_all )); do
   shape clean
   sample "$ph" "$cycle"
   echo "$ph $cycle $(awk '/^VmRSS/ {print $2}' "/proc/$pid/status" 2>/dev/null || echo 0)" \
-    >> "$dir/phase_rss"
+    >>"$dir/phase_rss"
   kill -USR1 "$pid" 2>/dev/null || true
-  if ! kill -0 "$pid" 2>/dev/null; then log "rustern exited"; touch "$dir/exited"; break; fi
+  if ! kill -0 "$pid" 2>/dev/null; then
+    log "rustern exited"
+    touch "$dir/exited"
+    break
+  fi
   i=$((i + 1))
 done
 log "done"
 stat "$mnt" >/dev/null 2>&1 || touch "$dir/dead"
 rc=0
 python3 scripts/overnight_report.py --final "$dir" "$start" "$(date +%s)" \
-  --deadline "$block_deadline" --max-rss "$max_rss_mib" > "$dir/report.md" || rc=$?
+  --deadline "$block_deadline" --max-rss "$max_rss_mib" >"$dir/report.md" || rc=$?
 exit "$rc"

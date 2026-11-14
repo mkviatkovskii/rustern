@@ -46,12 +46,24 @@ out=${OUT:-specs/001-fuse-client-poc/benchmarks.md}
 big=corpus/sizes/size_1073741824
 big4=bench/size_4294967296
 
-need() { command -v "$1" >/dev/null || { echo "bench: missing required tool: $1" >&2; exit 1; }; }
-need fio; need python3; need fusermount3; need cargo
-[[ -f $ref/$big ]] || { echo "bench: $ref/$big missing; run scripts/make-corpus.sh" >&2; exit 1; }
+need() { command -v "$1" >/dev/null || {
+  echo "bench: missing required tool: $1" >&2
+  exit 1
+}; }
+need fio
+need python3
+need fusermount3
+need cargo
+[[ -f $ref/$big ]] || {
+  echo "bench: $ref/$big missing; run scripts/make-corpus.sh" >&2
+  exit 1
+}
 
 ref_pid=$(pgrep -f "ternfuse.* $(realpath "$ref")\$" | head -1 || true)
-[[ -n $ref_pid ]] || { echo "bench: no ternfuse process serving $ref" >&2; exit 1; }
+[[ -n $ref_pid ]] || {
+  echo "bench: no ternfuse process serving $ref" >&2
+  exit 1
+}
 ref_bin=$(readlink "/proc/$ref_pid/exe")
 
 if [[ ! -f $ref/$big4 ]]; then
@@ -59,7 +71,7 @@ if [[ ! -f $ref/$big4 ]]; then
   echo "bench: creating $ref/$big4"
   mkdir -p target "$ref/bench"
   tmpd=$(mktemp -d target/bench-file.XXXXXX)
-  head -c 4294967296 /dev/urandom > "$tmpd/${big4##*/}"
+  head -c 4294967296 /dev/urandom >"$tmpd/${big4##*/}"
   cp -- "$tmpd/${big4##*/}" "$ref/$big4"
   rm -rf -- "$tmpd"
 fi
@@ -75,14 +87,23 @@ tf_pid=
 # A FUSE unmount can fail with EBUSY for a moment after the last reader closed its files,
 # while the kernel still sends their releases; retry for up to 5 s.
 unmount() {
-  for _ in $(seq 50); do fusermount3 -u "$1" 2>/dev/null && return; sleep 0.1; done
+  for _ in $(seq 50); do
+    fusermount3 -u "$1" 2>/dev/null && return
+    sleep 0.1
+  done
   fusermount3 -u "$1"
 }
 cleanup() {
-  [[ -n $rustern_pid ]] && { kill -TERM "$rustern_pid" 2>/dev/null; wait "$rustern_pid" 2>/dev/null; }
+  [[ -n $rustern_pid ]] && {
+    kill -TERM "$rustern_pid" 2>/dev/null
+    wait "$rustern_pid" 2>/dev/null
+  }
   mountpoint -q "$mnt" && unmount "$mnt"
   mountpoint -q "$tmnt" && unmount "$tmnt"
-  [[ -n $tf_pid ]] && { kill -TERM "$tf_pid" 2>/dev/null; wait "$tf_pid" 2>/dev/null; }
+  [[ -n $tf_pid ]] && {
+    kill -TERM "$tf_pid" 2>/dev/null
+    wait "$tf_pid" 2>/dev/null
+  }
   rmdir -- "$mnt" "$tmnt" 2>/dev/null
   rm -rf -- "$work"
 }
@@ -92,46 +113,63 @@ mount_rustern() { # [extra flags...]
   mkdir -p "$mnt"
   "$bin" -registry "$registry" -log-file "$work/rustern.log" "$@" "$mnt" &
   rustern_pid=$!
-  for _ in $(seq 100); do mountpoint -q "$mnt" && return; sleep 0.1; done
-  echo "bench: rustern did not mount within 10 s" >&2; exit 1
+  for _ in $(seq 100); do
+    mountpoint -q "$mnt" && return
+    sleep 0.1
+  done
+  echo "bench: rustern did not mount within 10 s" >&2
+  exit 1
 }
 unmount_rustern() {
-  kill -TERM "$rustern_pid"; wait "$rustern_pid" || true; rustern_pid=
+  kill -TERM "$rustern_pid"
+  wait "$rustern_pid" || true
+  rustern_pid=
 }
 mount_ternfuse() { # <GOMEMLIMIT>: a second, fresh ternfuse next to <ref-mount>
   mkdir -p "$tmnt"
   GOMEMLIMIT=$1 "$ref_bin" -log-file "$work/ternfuse.log" -registry "$registry" "$tmnt" &
   tf_pid=$!
-  for _ in $(seq 100); do mountpoint -q "$tmnt" && return; sleep 0.1; done
-  echo "bench: ternfuse did not mount within 10 s" >&2; exit 1
+  for _ in $(seq 100); do
+    mountpoint -q "$tmnt" && return
+    sleep 0.1
+  done
+  echo "bench: ternfuse did not mount within 10 s" >&2
+  exit 1
 }
 unmount_ternfuse() {
-  unmount "$tmnt"; wait "$tf_pid" || true; tf_pid=
+  unmount "$tmnt"
+  wait "$tf_pid" || true
+  tf_pid=
 }
 
 cpu_ticks() { awk '{print $14 + $15}' "/proc/$1/stat"; }
 hwm_kib() { awk '/^VmHWM/ {print $2}' "/proc/$1/status"; }
 rss_kib() { awk '/^VmRSS/ {print $2}' "/proc/$1/status"; }
 # Resets the peak RSS (VmHWM) to the current RSS, so each workload's peak is its own.
-reset_hwm() { echo 5 > "/proc/$1/clear_refs"; }
+reset_hwm() { echo 5 >"/proc/$1/clear_refs"; }
 # Page cache, dentries and inodes (3): every timed run starts with cold kernel caches.
 if sudo -n true 2>/dev/null; then cold=1; else cold=0; fi
-drop_caches() { (( cold )) || return 0; sync; echo 3 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null; }
+drop_caches() {
+  ((cold)) || return 0
+  sync
+  echo 3 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null
+}
 rcvbuf_errors() { awk '/^Udp:/ {n++; if (n == 2) print $6}' /proc/net/snmp; }
 
 # fio_run <label> <client> <pid> <round> <fio args...>: appends one JSON line to $work/results.
 fio_run() {
-  local label=$1 client=$2 pid=$3 round=$4; shift 4
+  local label=$1 client=$2 pid=$3 round=$4
+  shift 4
   local t0 t1 rss0
   drop_caches
   rss0=$(rss_kib "$pid")
   reset_hwm "$pid"
   t0=$(cpu_ticks "$pid")
   fio --output-format=json --readonly --direct=1 --invalidate=1 --ioengine=psync \
-      --group_reporting --name="$label" "$@" > "$work/fio.json"
+    --group_reporting --name="$label" "$@" >"$work/fio.json"
   t1=$(cpu_ticks "$pid")
   python3 - "$label" "$client" "$round" "$((t1 - t0))" "$(getconf CLK_TCK)" "$(hwm_kib "$pid")" \
-      "$rss0" "$work/fio.json" >> "$work/results" <<'EOF'
+    "$rss0" "$work/fio.json" >>"$work/results" <<'EOF'
 import json, sys
 label, client, rnd, ticks, hz, hwm, rss0, path = sys.argv[1:]
 r = json.load(open(path))["jobs"][0]["read"]
@@ -149,15 +187,16 @@ latency_run() { # <client> <mount> <round>
   "$latency" "$2" "$lat_n" "$ref" | while read -r metric p50 p99 n; do
     printf '{"label": "%s", "client": "%s", "round": %s, "p50_us": %s, "p99_us": %s, "n": %s}\n' \
       "$metric" "$1" "$3" "$p50" "$p99" "$n"
-  done >> "$work/results"
+  done >>"$work/results"
 }
 
 declare -A mnt_of pid_of
 # Client order for round <r>: ternfuse first in odd rounds, Rustern first in even ones.
-order() { if (( $1 % 2 )); then echo ternfuse rustern; else echo rustern ternfuse; fi; }
+order() { if (($1 % 2)); then echo ternfuse rustern; else echo rustern ternfuse; fi; }
 
 job() { # <round> <label> <file> <fio args...>: one fio job on both clients, back to back
-  local r=$1 label=$2 f=$3 c; shift 3
+  local r=$1 label=$2 f=$3 c
+  shift 3
   for c in $(order "$r"); do
     echo "bench: round $r, $label, $c"
     fio_run "$label" "$c" "${pid_of[$c]}" "$r" --filename="${mnt_of[$c]}/$f" "$@"
@@ -184,7 +223,7 @@ drops0=$(rcvbuf_errors)
 mount_rustern
 mnt_of=([ternfuse]=$ref [rustern]=$mnt)
 pid_of=([ternfuse]=$ref_pid [rustern]=$rustern_pid)
-if (( cold )); then
+if ((cold)); then
   echo "bench: dropping the page cache before every timed run"
 else
   echo "bench: no passwordless sudo; warm-up read of $big and $big4 instead of dropping caches"
@@ -216,7 +255,7 @@ drops1=$(rcvbuf_errors)
 cp -- "$work/results" target/bench-results.jsonl
 
 python3 - "$work/results" "$out" "$((drops1 - drops0))" "$(git -C ternfs rev-parse --short HEAD)" \
-    "$(nproc)" "$(uname -r)" "$lat_n" "$seq_runtime" "$runtime" "$fio_rounds" "$lat_rounds" "$cold" <<'EOF'
+  "$(nproc)" "$(uname -r)" "$lat_n" "$seq_runtime" "$runtime" "$fio_rounds" "$lat_rounds" "$cold" <<'EOF'
 import json, sys, datetime
 path, out, drops, commit, cpus, kernel, lat_n, seq_runtime, runtime, fio_rounds, lat_rounds, cold = sys.argv[1:]
 MARK = "<!-- end of generated results: notes below are kept by scripts/bench.sh -->"

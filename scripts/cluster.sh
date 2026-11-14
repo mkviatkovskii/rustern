@@ -17,25 +17,42 @@ registry_up() {
 }
 
 cmd_start() {
-  if registry_up; then echo "cluster already running ($REGISTRY)"; return 0; fi
-  mkdir -p "$DATA_DIR"
-  local fstype; fstype=$(stat -f -c %T "$DATA_DIR")
-  if [[ $fstype == tmpfs ]]; then echo "refusing: $DATA_DIR is on tmpfs" >&2; exit 1; fi
-  local free_kb; free_kb=$(df -Pk "$DATA_DIR" | awk 'NR==2 {print $4}')
-  if (( free_kb < 20 * 1000 * 1000 )); then
-    echo "refusing: less than 20 GB free under $DATA_DIR" >&2; exit 1
+  if registry_up; then
+    echo "cluster already running ($REGISTRY)"
+    return 0
   fi
-  [[ -x $BIN/ternrun ]] || { echo "missing $BIN/ternrun (build upstream first)" >&2; exit 1; }
+  mkdir -p "$DATA_DIR"
+  local fstype
+  fstype=$(stat -f -c %T "$DATA_DIR")
+  if [[ $fstype == tmpfs ]]; then
+    echo "refusing: $DATA_DIR is on tmpfs" >&2
+    exit 1
+  fi
+  local free_kb
+  free_kb=$(df -Pk "$DATA_DIR" | awk 'NR==2 {print $4}')
+  local min_gb=${RUSTERN_MIN_FREE_GB:-20}
+  if ((free_kb < min_gb * 1000 * 1000)); then
+    echo "refusing: less than $min_gb GB free under $DATA_DIR" >&2
+    exit 1
+  fi
+  [[ -x $BIN/ternrun ]] || {
+    echo "missing $BIN/ternrun (build upstream first)" >&2
+    exit 1
+  }
   unmount_stale
-  : > "$LOG"
+  : >"$LOG"
   # setsid: the cluster must outlive the shell (and session) that started it.
   setsid nohup "$BIN/ternrun" -leader-only -data-dir "$DATA_DIR" -binaries-dir "$BIN/" \
-    >> "$LOG" 2>&1 &
-  echo $! > "$PIDFILE"
+    >>"$LOG" 2>&1 &
+  echo $! >"$PIDFILE"
   for _ in $(seq 120); do
-    if grep -q operational "$LOG"; then echo "cluster operational (log: $LOG)"; return 0; fi
+    if grep -q operational "$LOG"; then
+      echo "cluster operational (log: $LOG)"
+      return 0
+    fi
     if ! kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
-      echo "ternrun exited; see $LOG" >&2; exit 1
+      echo "ternrun exited; see $LOG" >&2
+      exit 1
     fi
     sleep 1
   done
@@ -45,10 +62,14 @@ cmd_start() {
 
 cmd_stop() {
   if [[ -f $PIDFILE ]]; then
-    local pid; pid=$(cat "$PIDFILE")
+    local pid
+    pid=$(cat "$PIDFILE")
     if kill -0 "$pid" 2>/dev/null; then
       kill -TERM "$pid"
-      for _ in $(seq 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+      for _ in $(seq 30); do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 1
+      done
     fi
     rm -f "$PIDFILE"
   fi
@@ -67,5 +88,8 @@ case ${1:-} in
   start) cmd_start ;;
   stop) cmd_stop ;;
   status) cmd_status ;;
-  *) echo "usage: $0 start|stop|status" >&2; exit 2 ;;
+  *)
+    echo "usage: $0 start|stop|status" >&2
+    exit 2
+    ;;
 esac

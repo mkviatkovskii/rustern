@@ -377,3 +377,5 @@ Task: "Implement crates/rustern-core/src/layout.rs"                       # T089
   "record that they fail" commits, which contain tests only.
 - Deferred work stays out of this feature: interrupt support, RS reconstruction, disk
   cache, socket tuning (`docs/future-features.md`).
+- [X] T134 Lint the helper scripts in the gate: shellcheck, shfmt (`.editorconfig`), ruff (`ruff.toml`) and the hook tests; add a fuzz smoke (20 s per target) to the full gate
+- [ ] T135 GitHub CI (`.github/workflows/ci.yml`): `quick` and `full` jobs running `scripts/gate.sh`, upstream built at `.ternfs-rev` and cached, shellcheck through reviewdog; done when both jobs pass on GitHub
