@@ -8,8 +8,8 @@ Validation guide for feature 001. Contracts: [cli.md](contracts/cli.md),
 - Linux with `/dev/fuse` and `fusermount3`.
 - Rust toolchain from `rust-toolchain.toml` (installed by rustup on first `cargo` run).
 - Go (for `tools/rsgen` and `tools/goldens`).
-- Upstream checkout in `ternfs/` at commit `5550891`, built with
-  `cd ternfs && ./build.sh alpine` (Docker).
+- Upstream in `ternfs/`, a submodule pinned at commit `5550891`
+  (`git submodule update --init --depth 1`), built with `cd ternfs && ./build.sh alpine` (Docker).
 - Gate tools: `cargo install --locked cargo-nextest cargo-deny cargo-fuzz`, and
   `rustup toolchain install nightly` (fuzzing only). `fio` for the benchmarks.
 - `user_allow_other` in `/etc/fuse.conf` (only the `allow_other` mount test needs it).

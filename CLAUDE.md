@@ -48,7 +48,7 @@ literals") for this repo.
 | Follow-up on a semble hit in `.rs` / `.go` | Serena: `get_symbols_overview` / `find_symbol(include_body=True)` on the hit's file, never a whole-file `Read` |
 | Every occurrence of a literal in code | Serena `s.fs.search_for_pattern`; in non-code files, Grep |
 
-- One root search covers `crates/`, `tools/` and `ternfs/`: `.sembleignore` re-includes the gitignored `ternfs/` and
+- One root search covers `crates/`, `tools/` and `ternfs/`: `.sembleignore` includes the `ternfs/` submodule and
   excludes `ternfs/mnt/` (live FUSE mounts, cluster data), `ternfs/build/` and `ternfs/go/vendor/`. Don't pass
   `ternfs/` as a separate `repo`; it has no such excludes.
 - Pass `max_snippet_lines=0` when only the location matters; trust the top hit and don't re-search the same thing.
@@ -75,4 +75,5 @@ Non-code files (docs, specs, configs, TOML/JSON/YAML, logs), `target/`, `ternfs/
 language server; prefer semble for discovery), anything outside the repo (e.g. `~/.cargo/registry`), and filtering
 command output through a pipe.
 
-`ternfs/` is gitignored; Serena indexes it via the override in `.serena/project.local.yml`.
+`ternfs/` is a git submodule (upstream TernFS at the pinned commit); Serena indexes it via the override in
+`.serena/project.local.yml`.

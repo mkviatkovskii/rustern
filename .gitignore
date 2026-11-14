@@ -1,5 +1,4 @@
 /target
-/ternfs/
 crates/*/fuzz/target
 crates/*/fuzz/artifacts
 crates/*/fuzz/coverage

@@ -32,9 +32,9 @@ fi
 
 step "upstream pin"
 head=$(git -C ternfs rev-parse HEAD)
-pin=$(<.ternfs-rev)
+pin=$(git rev-parse :ternfs) # the index: also right before the pin is committed
 [[ $head == "$pin" ]] || {
-  echo "gate: ternfs/ is at $head, expected $pin (.ternfs-rev)" >&2
+  echo "gate: ternfs/ is at $head, the submodule pin is $pin (git submodule update)" >&2
   exit 1
 }
 

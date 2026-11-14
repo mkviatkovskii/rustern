@@ -1,0 +1,5 @@
+[submodule "ternfs"]
+	path = ternfs
+	url = https://github.com/xtxmarkets/ternfs
+	ignore = untracked
+	shallow = true

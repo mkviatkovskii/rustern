@@ -14,7 +14,7 @@ Rust FUSE client for TernFS (XTXMarkets). Governing doc: `.specify/memory/consti
 - `crates/rustern` binary: CLI, signals, logging, metrics.
 - `tools/rsgen` (Go, adapted from upstream `go/bincodegen`), `tools/goldens` (Go golden vectors -> `testdata/goldens/*.hex`).
 - `scripts/gate.sh` = single merge gate. `docs/deviations.md` records every deviation from ternfuse (DEV-xxx, each with a test); `docs/future-features.md` deferred ideas.
-- `ternfs/` = gitignored upstream checkout, pinned at commit `5550891`; reference only, not part of the build except via `tools/go.mod` replace.
+- `ternfs/` = upstream git submodule, pinned at commit `5550891`; reference only, not part of the build except via `tools/go.mod` replace.
 
 ## Invariants
 - Request paths never panic (no unwrap/expect/indexing; lint-enforced). `unsafe_code = "forbid"`.
