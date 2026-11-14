@@ -1,0 +1,37 @@
+[package]
+name = "rustern-client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Async read-only TernFS client"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+rustern-msgs.workspace = true
+rustern-core.workspace = true
+backon.workspace = true
+bytes.workspace = true
+dashmap.workspace = true
+deadpool.workspace = true
+fastrand.workspace = true
+futures-util.workspace = true
+memmap2.workspace = true
+metrics.workspace = true
+moka.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[features]
+# Benchmark: 2 MiB reads (needs `fs.fuse.max_pages_limit` >= 512).
+read2m = []
+
+[dev-dependencies]
+dhat.workspace = true
+metrics-exporter-prometheus.workspace = true
+proptest.workspace = true
+tracing-subscriber.workspace = true

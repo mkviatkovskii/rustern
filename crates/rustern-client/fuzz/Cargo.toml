@@ -1,0 +1,23 @@
+[package]
+name = "rustern-client-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "MIT OR Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Not part of the main workspace: needs nightly (`cargo +nightly fuzz run page_stream`).
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+rustern-client = { path = ".." }
+
+[[bin]]
+name = "page_stream"
+path = "fuzz_targets/page_stream.rs"
+test = false
+doc = false
+bench = false
