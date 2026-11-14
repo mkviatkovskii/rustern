@@ -238,6 +238,44 @@ fn sigterm_unmounts() {
     unmounts_on(Signal::TERM);
 }
 
+/// SIGTERM with a file open, as root: fuser's plain unmount fails with EBUSY there, and
+/// rustern must detach rather than exit 1 and leave a dead mount. Root comes from a user +
+/// mount namespace, so no privileges are needed; skipped where those are disabled.
+#[test]
+#[ignore = "needs cluster: run via scripts/gate.sh"]
+fn sigterm_with_open_file_unmounts_as_root() {
+    ref_corpus();
+    let dir = std::env::temp_dir().join(format!("rustern-nsroot-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let script = r#"
+        "$0" -registry "$1" "$2" 2> "$2.log" & p=$!
+        for _ in $(seq 100); do mountpoint -q "$2" && break; sleep 0.05; done
+        mountpoint -q "$2" || { echo "no mount"; cat "$2.log"; exit 2; }
+        exec 3< "$2/corpus/corpus.sha256"
+        kill -TERM $p; wait $p; echo "exit $?"
+        if mountpoint -q "$2"; then echo "still mounted"; umount -l "$2"; else echo unmounted; fi
+    "#;
+    let out = std::process::Command::new("unshare")
+        .args(["-Urm", "--propagation", "private", "sh", "-c", script])
+        .arg(env!("CARGO_BIN_EXE_rustern"))
+        .arg(&env().registry)
+        .arg(&dir)
+        .output()
+        .unwrap();
+    let _ = std::fs::remove_file(dir.with_extension("log"));
+    let _ = std::fs::remove_dir(&dir);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    if stderr.contains("unshare failed") {
+        eprintln!("skipped: no user namespaces here: {stderr}");
+        return;
+    }
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "exit 0\nunmounted\n",
+        "{stderr}"
+    );
+}
+
 #[test]
 #[ignore = "needs cluster: run via scripts/gate.sh"]
 fn bad_registry_exits_1() {
@@ -344,16 +382,29 @@ fn log_file_verbose_and_statfs() {
     std::fs::remove_dir(&dir).unwrap();
 }
 
+/// `-o allow_other` adds `default_permissions` where the host allows it (root, or
+/// `user_allow_other` in /etc/fuse.conf); elsewhere, the usual case for an unprivileged
+/// user, the mount fails at startup with an error that names the missing setting.
 #[test]
 #[ignore = "needs cluster: run via scripts/gate.sh"]
 fn allow_other_default_permissions() {
     ref_corpus();
     let conf = std::fs::read_to_string("/etc/fuse.conf").unwrap_or_default();
     let allowed = conf.lines().any(|l| l.trim() == "user_allow_other");
-    assert!(
-        allowed || rustix::process::geteuid().is_root(),
-        "-o allow_other needs `user_allow_other` in /etc/fuse.conf"
-    );
+    if !allowed && !rustix::process::geteuid().is_root() {
+        let Err(err) = Mount::try_new(&["-o", "allow_other"]) else {
+            panic!("allow_other mounted without user_allow_other");
+        };
+        assert!(
+            err.contains("did not mount (Some("),
+            "exited at startup: {err}"
+        );
+        assert!(
+            err.contains("cannot mount") && err.contains("user_allow_other"),
+            "{err}"
+        );
+        return;
+    }
     let m = Mount::new(&["-o", "allow_other"]);
     let line = mountinfo(&m.path).unwrap();
     let sup = super_options(&line);

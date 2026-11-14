@@ -141,7 +141,7 @@ fn run() -> Result<(), StartupError> {
         signal_parent();
     }
 
-    let result = rt.block_on(serve(session, metrics));
+    let result = rt.block_on(serve(session, metrics, settings.mountpoint.clone()));
     rt.shutdown_timeout(DRAIN);
     result
 }
@@ -191,7 +191,11 @@ fn signal_parent() {
 /// Serves until a signal (unmount, exit 0), an external unmount (exit 0) or a session
 /// failure (exit 1). SIGUSR1 dumps the metrics to the log; histogram samples are folded
 /// into summaries every [`UPKEEP`].
-async fn serve(session: BackgroundSession, metrics: PrometheusHandle) -> Result<(), StartupError> {
+async fn serve(
+    session: BackgroundSession,
+    metrics: PrometheusHandle,
+    mountpoint: std::path::PathBuf,
+) -> Result<(), StartupError> {
     let sig = |k| signal(k).map_err(StartupError::setup("cannot install signal handlers"));
     let (mut int, mut term, mut hup, mut usr1) = (
         sig(SignalKind::interrupt())?,
@@ -237,6 +241,15 @@ async fn serve(session: BackgroundSession, metrics: PrometheusHandle) -> Result<
     match tokio::task::spawn_blocking(|| session.umount_and_join()).await {
         Ok(Ok(())) => {
             tracing::info!("unmounted");
+            Ok(())
+        }
+        // fuser tries a plain unmount where it may (root, also inside a user namespace;
+        // everyone else goes through `fusermount3 -u -z`), which fails while files are open.
+        // Detach lazily, as fusermount does, rather than exit and leave a dead mount behind.
+        Ok(Err(e)) if e.raw_os_error() == Some(rustix::io::Errno::BUSY.raw_os_error()) => {
+            rustix::mount::unmount(&mountpoint, rustix::mount::UnmountFlags::DETACH)
+                .map_err(|e| StartupError::Session(e.into()))?;
+            tracing::info!("mount busy: detached it; files still open now fail");
             Ok(())
         }
         Ok(Err(e)) => Err(StartupError::Session(e)),

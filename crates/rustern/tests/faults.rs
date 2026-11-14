@@ -586,8 +586,17 @@ mod cluster_serial {
                 Some(EIO)
             );
         }
+        // The alert is logged after everything above, so once it is read, so is the rest.
+        assert!(m.wait_stderr("alert=true"), "no alert line");
         let log = m.stderr();
-        assert!(log.len() > 1000, "trace logging is on");
+        let traced = log
+            .iter()
+            .filter(|l| l.contains(" DEBUG ") || l.contains(" TRACE "))
+            .count();
+        assert!(
+            traced > 100,
+            "trace logging is on: {traced} per-operation lines"
+        );
         for l in &log {
             for (name, value) in secret_values(l) {
                 assert!(value.starts_with("<redacted>"), "{name}={value} in: {l}");
