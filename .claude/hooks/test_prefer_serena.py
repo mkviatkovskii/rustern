@@ -8,6 +8,8 @@ import sys
 
 ROOT = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 HOOK = os.path.join(ROOT, ".claude", "hooks", "prefer_serena.py")
+# The checkout as a `$HOME/...` path (the hook expands $HOME), wherever the checkout is.
+HOME_ROOT = "$HOME/" + os.path.relpath(ROOT, os.path.expanduser("~"))
 
 
 def run(tool, inp, cwd=ROOT):
@@ -104,7 +106,7 @@ def main():
         ("A", *B("git diff crates/ && git status")),
         # text tools
         ("D", *B("cat crates/rustern/src/main.rs")),
-        ("D", *B("grep -n foo $HOME/Repos/rustern/crates/rustern/src/main.rs")),
+        ("D", *B(f"grep -n foo {HOME_ROOT}/crates/rustern/src/main.rs")),
         ("D", *B("grep -rn foo crates/*/src")),
         ("D", *B("grep -rn foo . --include=*.rs")),
         ("D", *B("grep -rn foo --include=*.go")),
