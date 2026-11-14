@@ -1,0 +1,30 @@
+[package]
+name = "rustern-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "TernFS core types: inode ids, span layout, CRC helpers"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+rustern-msgs.workspace = true
+bytes.workspace = true
+crc-fast.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+crc32c.workspace = true
+criterion.workspace = true
+proptest.workspace = true
+
+[[bench]]
+name = "crc"
+harness = false
+
+[[bench]]
+name = "layout"
+harness = false
