@@ -15,7 +15,7 @@ use rustern_client::{Client, ClientError};
 use rustern_fuse::attr::AttrConfig;
 use rustern_fuse::bridge::Bridge;
 use rustern_fuse::fs::RusternFs;
-use tokio::signal::unix::{SignalKind, signal};
+use tokio::signal::unix::{Signal, SignalKind, signal};
 use tracing::Level;
 
 use crate::cli::{CliError, Settings};
@@ -127,6 +127,12 @@ fn run() -> Result<(), StartupError> {
     config.acl = settings.mount.acl;
     config.n_threads = Some(settings.threads);
     config.clone_fd = true;
+    // Before mounting: a signal as soon as the mount is up (or `-signal-parent` sent) must
+    // unmount, not kill the process and leave the mount behind.
+    let signals = {
+        let _rt = rt.enter();
+        Signals::install()?
+    };
     let session = fuser::spawn_mount(
         Bridge::new(Arc::new(fs), rt.handle().clone()),
         &settings.mountpoint,
@@ -141,7 +147,12 @@ fn run() -> Result<(), StartupError> {
         signal_parent();
     }
 
-    let result = rt.block_on(serve(session, metrics, settings.mountpoint.clone()));
+    let result = rt.block_on(serve(
+        session,
+        signals,
+        metrics,
+        settings.mountpoint.clone(),
+    ));
     rt.shutdown_timeout(DRAIN);
     result
 }
@@ -188,21 +199,42 @@ fn signal_parent() {
     }
 }
 
+/// The handled signals: SIGINT, SIGTERM and SIGHUP unmount and exit, SIGUSR1 dumps the metrics.
+struct Signals {
+    int: Signal,
+    term: Signal,
+    hup: Signal,
+    usr1: Signal,
+}
+
+impl Signals {
+    /// Needs a Tokio runtime context.
+    fn install() -> Result<Self, StartupError> {
+        let sig = |k| signal(k).map_err(StartupError::setup("cannot install signal handlers"));
+        Ok(Self {
+            int: sig(SignalKind::interrupt())?,
+            term: sig(SignalKind::terminate())?,
+            hup: sig(SignalKind::hangup())?,
+            usr1: sig(SignalKind::user_defined1())?,
+        })
+    }
+}
+
 /// Serves until a signal (unmount, exit 0), an external unmount (exit 0) or a session
 /// failure (exit 1). SIGUSR1 dumps the metrics to the log; histogram samples are folded
 /// into summaries every [`UPKEEP`].
 async fn serve(
     session: BackgroundSession,
+    signals: Signals,
     metrics: PrometheusHandle,
     mountpoint: std::path::PathBuf,
 ) -> Result<(), StartupError> {
-    let sig = |k| signal(k).map_err(StartupError::setup("cannot install signal handlers"));
-    let (mut int, mut term, mut hup, mut usr1) = (
-        sig(SignalKind::interrupt())?,
-        sig(SignalKind::terminate())?,
-        sig(SignalKind::hangup())?,
-        sig(SignalKind::user_defined1())?,
-    );
+    let Signals {
+        mut int,
+        mut term,
+        mut hup,
+        mut usr1,
+    } = signals;
     // `build_recorder` starts no upkeep task: without one, every histogram sample (several
     // per block fetch) stays buffered until the next render, so memory grows with traffic.
     let upkeep = metrics.clone();
