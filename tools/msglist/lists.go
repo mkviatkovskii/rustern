@@ -1,4 +1,6 @@
-// Copyright 2025 XTX Markets Technologies Limited
+// Copyright 2026 Mikhail Kviatkovskii
+// The lists are TernFS's (go/bincodegen/bincodegen.go, upstream 5550891), by XTX Markets
+// Technologies Limited; see NOTICE.
 //
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 

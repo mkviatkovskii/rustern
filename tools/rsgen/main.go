@@ -1,4 +1,6 @@
-// Copyright 2025 XTX Markets Technologies Limited
+// Copyright 2026 Mikhail Kviatkovskii
+// Adapted from TernFS go/bincodegen/bincodegen.go (upstream 5550891) by XTX Markets
+// Technologies Limited; see NOTICE.
 //
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
@@ -546,7 +548,8 @@ func main() {
 	}
 	sort.Slice(g.newtypes, func(i, j int) bool { return g.newtypes[i].Name() < g.newtypes[j].Name() })
 
-	g.p("// Copyright 2025 XTX Markets Technologies Limited")
+	g.p("// Copyright 2026 Mikhail Kviatkovskii")
+	g.p("// Generated from TernFS go/msgs by XTX Markets Technologies Limited; see NOTICE.")
 	g.p("//")
 	g.p("// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception")
 	g.p("")

@@ -1,4 +1,5 @@
-// Copyright 2025 XTX Markets Technologies Limited
+// Copyright 2026 Mikhail Kviatkovskii
+// Generated from TernFS go/msgs by XTX Markets Technologies Limited; see NOTICE.
 //
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
