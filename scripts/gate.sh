@@ -115,11 +115,14 @@ done < <(grep -oE '`crates/[^`]+\.rs::[^`]+`' docs/deviations.md)
 
 step "fuzz smoke"
 # Every target briefly, from its checked-in corpus; new inputs go to a scratch directory.
+# The target is explicit: cargo-fuzz defaults to the one it was built for (musl for
+# prebuilt binaries), and ASan needs glibc.
+host=$(rustc -vV | sed -n 's/^host: //p')
 for t in crates/*/fuzz/fuzz_targets/*.rs; do
   crate=${t%%/fuzz/*}
   name=$(basename "$t" .rs)
   mkdir -p "$tmp/fuzz/$name"
-  (cd "$crate" && cargo +nightly fuzz run "$name" "$tmp/fuzz/$name" "fuzz/corpus/$name" -- \
+  (cd "$crate" && cargo +nightly fuzz run --target "$host" "$name" "$tmp/fuzz/$name" "fuzz/corpus/$name" -- \
     -max_total_time="${RUSTERN_FUZZ_SECONDS:-20}" -print_final_stats=0)
 done
 
