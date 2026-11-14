@@ -1,0 +1,58 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(rg *)",
+      "Bash(ag *)",
+      "Bash(ack *)",
+      "Bash(fd *)",
+      "Bash(grep -r*)",
+      "Bash(grep -R*)",
+      "Bash(find . *)",
+      "Bash(find crates*)",
+      "Bash(find tools*)",
+      "Bash(find ternfs*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Grep|Bash|Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/prefer_serena.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "serena-hooks activate --client=claude-code",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "echo 'Serena in this repo: the project is auto-activated (--project-from-cwd), so there is no activate_project tool. Before any other tool call, load mcp__serena__initial_instructions, mcp__serena__serena_repl and mcp__semble__search via ToolSearch, call initial_instructions to get the session id, then follow the Serena cheat sheet and the search-tool table in CLAUDE.md.'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Reminder (CLAUDE.md): find code or docs by what they do with semble search (repo=/home/mk/Repos/rustern; content=docs for docs/specs, content=config for TOML/YAML/JSON, content=all when unsure; covers ternfs C++ too); read/search Rust/Go code by name with Serena (s.lsp.get_symbols_overview, s.lsp.find_symbol, s.lsp.find_referencing_symbols); edit it with s.edit.* (built-in Edit only as a fallback after a partial Read), create files with Write. Never use shell, python/perl heredocs or whole-file Reads on .rs/.go. A hook block means switch to Serena, not rephrase the command.'",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

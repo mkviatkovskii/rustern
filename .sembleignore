@@ -1,0 +1,9 @@
+# semble index rules (gitignore syntax, merged with .gitignore).
+# ternfs/ is gitignored here but holds the upstream reference implementation (Go, C++, docs): index it,
+# minus mounts/cluster data, build output and vendored deps.
+!ternfs/
+ternfs/mnt/
+ternfs/build/
+ternfs/go/vendor/
+ternfs/*.log
+ternfs/*.pid
