@@ -1,0 +1,11 @@
+/target
+/ternfs/
+crates/*/fuzz/target
+crates/*/fuzz/artifacts
+crates/*/fuzz/coverage
+
+# Local editor, agent and tool state
+/.idea/
+/.awb/
+/.serena/logs/
+__pycache__/

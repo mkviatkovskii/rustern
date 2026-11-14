@@ -1,0 +1,37 @@
+[package]
+name = "rustern-msgs-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "MIT OR Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Not part of the main workspace: needs nightly (`cargo +nightly fuzz run <target>`).
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+rustern-msgs = { path = ".." }
+
+[[bin]]
+name = "shard_resp"
+path = "fuzz_targets/shard_resp.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "registry_resp"
+path = "fuzz_targets/registry_resp.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "blocks_resp"
+path = "fuzz_targets/blocks_resp.rs"
+test = false
+doc = false
+bench = false
