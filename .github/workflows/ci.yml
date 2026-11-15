@@ -94,6 +94,8 @@ jobs:
         # allow_other is mandatory for rustern; the namespace test covers unmounting as root.
         run: |
           sudo apt-get update -q && sudo apt-get install -yq fuse3
+          # GNU coreutils: uutils' sha256sum -c cannot open non-UTF-8 names (the corpus has some).
+          sudo apt-get install -yq --allow-remove-essential coreutils-from-gnu coreutils-from-uutils-
           [[ -e /dev/fuse ]] || sudo modprobe fuse
           echo user_allow_other | sudo tee -a /etc/fuse.conf
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0

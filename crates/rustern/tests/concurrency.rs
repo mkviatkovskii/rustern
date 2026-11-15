@@ -161,8 +161,12 @@ fn per_file_limit_does_not_starve_other_files() {
     for got in big_sums {
         assert_eq!(got, want[FILE_1G]);
     }
-    // Slack for a small machine: the 100 MiB read alone takes well under a second.
-    let limit = (alone * 2).max(Duration::from_millis(500));
+    // A fair CPU share, not starvation: the 16 readers hash on the same CPUs as the small
+    // one (and the cluster), so few CPUs stretch the small read; a starved one would wait
+    // out the 16 GiB of big reads. 2x at least, as slack on any machine.
+    let cpus = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
+    let share = u32::try_from((big.len() + 1).div_ceil(cpus).max(2)).unwrap();
+    let limit = (alone * share).max(Duration::from_millis(500));
     assert!(
         small_time <= limit,
         "{small_time:?} with 16 readers of another file vs {alone:?} alone"
