@@ -8,6 +8,11 @@ edition = "2024"
 rust-version = "1.100"
 license = "MIT OR Apache-2.0"
 
+# Whole-program optimisation for the shipped binary and the benchmarks (bench inherits it).
+[profile.release]
+lto = "fat"
+codegen-units = 1
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 

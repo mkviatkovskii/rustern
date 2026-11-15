@@ -1,0 +1,5 @@
+# x86-64-v3 (Haswell and later, 2013+: AVX2, BMI2, FMA) on every x86-64 build. The binary
+# stops with SIGILL on older CPUs. A RUSTFLAGS environment variable replaces this setting
+# rather than adding to it (cargo-fuzz sets one).
+[target.'cfg(target_arch = "x86_64")']
+rustflags = ["-C", "target-cpu=x86-64-v3"]

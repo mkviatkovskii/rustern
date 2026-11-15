@@ -6,6 +6,8 @@ Validation guide for feature 001. Contracts: [cli.md](contracts/cli.md),
 ## Prerequisites
 
 - Linux with `/dev/fuse` and `fusermount3`.
+- On x86-64, a CPU with x86-64-v3 (Haswell, 2013, or later: AVX2, BMI2, FMA). `.cargo/config.toml`
+  builds for it, and the binary stops with SIGILL on older CPUs.
 - Rust toolchain from `rust-toolchain.toml` (installed by rustup on first `cargo` run).
 - Go (for `tools/rsgen` and `tools/goldens`).
 - Upstream in `ternfs/`, a submodule pinned at commit `5550891`
