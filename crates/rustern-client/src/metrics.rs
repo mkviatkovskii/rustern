@@ -23,6 +23,9 @@ pub const BLOCK_BYTES: &str = "rustern_block_bytes_total";
 pub const BLOCK_CONNECT_SECONDS: &str = "rustern_block_connect_seconds";
 /// `rustern_block_header_seconds`: request sent to response header received.
 pub const BLOCK_HEADER_SECONDS: &str = "rustern_block_header_seconds";
+/// `rustern_span_warms_total`: spans whose blocks were asked for a page ahead of a sequential
+/// reader, so that their block services start reading them from disk early.
+pub const SPAN_WARMS: &str = "rustern_span_warms_total";
 /// `rustern_udp_unmatched_total`: responses with no waiting request.
 pub const UDP_UNMATCHED: &str = "rustern_udp_unmatched_total";
 /// `rustern_udp_malformed_total`: datagrams that are not valid response frames.
@@ -71,6 +74,11 @@ pub fn block_connect(elapsed: Duration) {
 /// Records the wait from sending a block request to its response header.
 pub fn block_header(elapsed: Duration) {
     metrics::histogram!(BLOCK_HEADER_SECONDS).record(elapsed.as_secs_f64());
+}
+
+/// Records one span warmed ahead of a sequential reader.
+pub fn span_warm() {
+    metrics::counter!(SPAN_WARMS).increment(1);
 }
 
 /// Records a response nobody was waiting for.

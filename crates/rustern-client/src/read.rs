@@ -6,10 +6,11 @@
 //! A missing or corrupt block is EIO; there is no Reed-Solomon reconstruction (DEV-004).
 //! Mirrored spans fail over across their readable copies.
 
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 
 use dashmap::DashMap;
-use futures_util::future::try_join_all;
+use futures_util::future::{join_all, try_join_all};
 use rustern_core::crc::crc32c;
 use rustern_core::inode::TernInode;
 use rustern_core::layout::PAGE;
@@ -32,6 +33,10 @@ pub const MAX_READ: u32 = if cfg!(feature = "read2m") {
 };
 
 const PAGE_BYTES: usize = 4096;
+
+/// A read starting within this distance of the previous read's end counts as sequential
+/// (the kernel's readahead requests arrive slightly out of order).
+const SEQUENTIAL_WINDOW: u64 = 8 << 20;
 
 fn bounds() -> ClientError {
     ClientError::Malformed {
@@ -81,6 +86,11 @@ pub struct FileHandle {
     id: InodeId,
     spans: Arc<[Span]>,
     permits: Arc<Semaphore>,
+    /// End of the previous read, to tell sequential readers apart.
+    last_end: AtomicU64,
+    /// The last span warmed, 0 for none (the first read fetches span 0 itself); see
+    /// [`FileHandle::warm_next`].
+    warmed: AtomicUsize,
 }
 
 impl Drop for FileHandle {
@@ -133,6 +143,7 @@ impl FileHandle {
         if offset >= end {
             return Ok(ReadBuf::default());
         }
+        self.warm_next(offset, end);
         let reads = &self.client.inner.reads;
         let file = Arc::clone(&self.permits)
             .acquire_owned()
@@ -149,6 +160,48 @@ impl FileHandle {
             len: to_usize(end.checked_sub(offset).ok_or_else(bounds)?)?,
             _file: Some(file),
         })
+    }
+
+    /// For a sequential reader, fetches the first page of each data block of the span after
+    /// the one at `offset`, in the background and once per span. A block service advises the
+    /// kernel to read an HDD block's remainder on its first fetch (`FADV_WILLNEED`), so the
+    /// next span's disk reads start while this span is read, not when the reader gets there.
+    fn warm_next(&self, offset: u64, end: u64) {
+        let prev = self.last_end.swap(end, Ordering::Relaxed);
+        if offset.abs_diff(prev) > SEQUENTIAL_WINDOW {
+            return;
+        }
+        let next = self
+            .spans
+            .partition_point(|s| s.end() <= offset)
+            .saturating_add(1);
+        if self.warmed.fetch_max(next, Ordering::Relaxed) >= next {
+            return;
+        }
+        let Some(SpanBody::Blocks(b)) = self.spans.get(next).map(|s| &s.body) else {
+            return;
+        };
+        // The blocks a read would fetch: every data block, or the first readable mirror.
+        let (data, wanted) = if b.is_mirrored() {
+            (b.blocks.len(), 1)
+        } else {
+            (usize::from(b.data_blocks), usize::MAX)
+        };
+        let blocks: Vec<BlockRef> = (b.blocks.iter().take(data))
+            .filter(|r| can_read(r.service.flags))
+            .take(wanted)
+            .cloned()
+            .collect();
+        crate::metrics::span_warm();
+        let client = self.client.clone();
+        tokio::spawn(async move {
+            let fetch = Blocks(&client.inner.config.block, &client.inner.conns);
+            join_all(blocks.iter().map(|r| async {
+                let mut page = [0u8; PAGE_BYTES];
+                let _ = fetch.fetch(r, 0, &mut [&mut page[..]]).await;
+            }))
+            .await;
+        });
     }
 }
 
@@ -195,6 +248,8 @@ impl Client {
             id: inode.id(),
             spans,
             permits,
+            last_end: AtomicU64::new(0),
+            warmed: AtomicUsize::new(0),
         })
     }
 
