@@ -429,6 +429,19 @@ impl<F: AsyncFilesystem> Filesystem for Bridge<F> {
         );
     }
 
+    /// Read-only: nothing to flush. Answered here rather than with fuser's default ENOSYS,
+    /// which logs a "not implemented" warning (and makes the kernel stop sending flushes).
+    fn flush(
+        &self,
+        _req: &Request,
+        _ino: INodeNo,
+        _fh: FileHandle,
+        _lock_owner: LockOwner,
+        reply: ReplyEmpty,
+    ) {
+        reply.ok();
+    }
+
     fn release(
         &self,
         _req: &Request,
