@@ -177,7 +177,7 @@ the same listing through the ternfuse mount (`crates/rustern/tests/browse.rs`).
 - [X] T071 [US1] Add the shutdown future to `crates/rustern/src/main.rs`: `tokio::select!` over `tokio::signal::unix` SIGINT, SIGTERM and SIGHUP (→ unmount, wait for in-flight requests up to 5 s, exit 0), the background session ending on its own (external `fusermount3 -u` → log at info, exit 0) and a fatal runtime error (→ unmount, exit 1); SIGUSR1, handled in a separate loop, renders the Prometheus handle and writes it to the log at info level
 - [X] T072 [US1] Implement `-signal-parent` in `crates/rustern/src/main.rs`: after `mounted at`, send SIGUSR1 to the parent with `rustix::process::kill_process(getppid, Signal::Usr1)`; passes T063 `signal_parent`
 - [X] T073 [US1] Fill in DEV-003's test path (`crates/rustern/tests/browse.rs::dir_attr_validity`) in `docs/deviations.md`
-- [ ] T074 [US1] Run the merge gates
+- [X] T074 [US1] Run the merge gates
 
 **Checkpoint**: the cluster mounts and browses correctly; MVP demonstrable.
 
@@ -218,7 +218,7 @@ uses the US1 mount.
 - [X] T092 [US2] Implement `crates/rustern-client/src/cache.rs`: `SpanCache` backed by `moka::future::Cache<InodeId, Arc<[Span]>>` with a weigher counting spans and `max_capacity = 1_048_576`, loading the whole span list through `try_get_with` and `span_at` by binary search; no block cache (R6); to pass T079
 - [X] T093 [US2] Implement `crates/rustern-client/src/read.rs`: `Client::open_file(inode) -> FileHandle` and `FileHandle::read(offset, size) -> Result<ReadBuf, ClientError>` (`ReadBuf` = a `PooledBuf` covering the page-aligned range plus the requested sub-range, `AsRef<[u8]>`); `read` finds the spans overlapping the range with `SpanCache::span_at` (the file's span list is loaded on first use); inline spans are sliced from the verified body; block spans use `layout::ranges` and split the pooled buffer into disjoint 4096-byte page slices and fetch the needed pages of each data block concurrently with `futures_util::future::try_join_all` (no spawn, R12), using block 0 for mirrored spans; the assembled bytes are clamped at file size (short read only at end of file) and padding past span size is zeros; when one read covers a whole span, the span CRC is also checked with `crc::combine`/`zero_extend` (FR-009); read buffers are bounded by a global `tokio::sync::Semaphore` sized to the memory limit and a per-file semaphore sized to the per-file memory limit, each read acquiring `READ_BUF_SIZE` permits from both before taking a `PooledBuf` (validation guarantees both limits hold at least one buffer, so no acquisition can wait forever) (an `Arc` held by every `FileHandle` of the inode and found through a `dashmap` keyed by inode; `open_file` creates it, the last `FileHandle` dropped removes it; per-file permits are taken before global ones); a request larger than 1 MiB is rejected with EIO (the kernel never sends one after `init`); `Client::read_link(inode)` reads the whole symlink body. Passes T082 and T085
 - [X] T094 [US2] Add to `crates/rustern-fuse/src/fs.rs`: `open` accepting `O_RDONLY`, storing `Client::open_file` in a `DashMap<u64, FileHandle>` under a new fh, replying `FOPEN_KEEP_CACHE` and sending no request (DEV-002); `read` calling `FileHandle::read` and returning the `ReadBuf` (the bridge replies with its slice); `release` removing the `FileHandle`; `readlink` (EINVAL when the inode is not a symlink); passes T083, T084 and T086
-- [ ] T095 [US2] Run the merge gates
+- [X] T095 [US2] Run the merge gates
 
 **Checkpoint**: US1 and US2 together are "the client works": browse plus correct bytes.
 
@@ -252,7 +252,7 @@ never returned; mirrored spans fail over.
 - [X] T105 [US3] Add mirrored failover to `crates/rustern-client/src/read.rs` (FR-010, DEV-004): for D = 1 spans, try blocks in order until one is verified, logging each failed block at warn with inode, block id, service and reason; a CRC mismatch and a mirrored span with no readable copy are logged as `tracing::error!(alert = true, …)` (FR-016); RS spans with a failed data block return the error (EIO), logged the same way. Passes T097 `mirrored_failover`, `mirrored_all_copies_alert` and `corrupt_block_eio`
 - [X] T106 [US3] Make the rest of T097, T098 and T099 pass: confirm block and shard deadlines come from the configured timeouts, that every EIO and ETIMEDOUT reply has a warn log line with operation, inode and cause (FR-016), and that no fault path panics or exits
 - [X] T107 [US3] Fill in the test paths for DEV-001, DEV-002, DEV-004, DEV-005 and DEV-006 in `docs/deviations.md`
-- [ ] T108 [US3] Run the merge gates
+- [X] T108 [US3] Run the merge gates
 
 **Checkpoint**: all three stories pass; the PoC is functionally complete.
 
@@ -287,7 +287,7 @@ documentation checks.
 - [ ] T128 Run `cargo-mutants` on the hand-written crates (generated.rs excluded) and add tests for surviving mutants, or record why each survivor is equivalent
 - [ ] T129 Add Kani proofs for the arithmetic the coverage report calls impossible: `read.rs` `bounds()`, stripe/layout offsets in `layout.rs` and `span.rs`, and length decoding in `wire.rs`
 - [ ] T130 Run each cargo-fuzz target (`shard_resp`, `registry_resp`, `blocks_resp`, `page_stream`) for at least 1 hour, minimise and commit the grown corpus, and fix any crash
-- [ ] T131 Write `docs/deployment.md`: the unprivileged default, and each root-only tuning (`user_allow_other`, socket buffer sizes, transparent huge pages, `drop_caches`) with what it changes and how Rustern behaves without it
+- [X] T131 Write `docs/deployment.md`: the unprivileged default, and each root-only tuning (`user_allow_other`, socket buffer sizes, transparent huge pages, `drop_caches`) with what it changes and how Rustern behaves without it
 - [X] T132 Shutdown as root (also root in a user namespace) with a file open: fuser's plain unmount fails with EBUSY, so Rustern exited 1 and left a dead mount (ENOTCONN). `main.rs::serve` now detaches lazily on EBUSY, as `fusermount3 -u -z` does for unprivileged users; `browse.rs::sigterm_with_open_file_unmounts_as_root` covers it in an `unshare -Urm` namespace
 - [X] T133 Check that an old Rustern does not unmount a new mount at the same path after an external unmount (fuser re-unmounts by path on drop): not reproduced, the fuser `is_mounted` check holds
 - [X] T119 Run the merge gates (full `scripts/gate.sh` passed 2026-11-14 as an unprivileged user: 171 cluster and 12 fault tests, 98.61% line coverage)
