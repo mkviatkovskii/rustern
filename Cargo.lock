@@ -194,6 +194,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "87a0cf66fd1eb2fb7b822cb78370d82303750809bc6ba855f3f58e517d3238db"
 
 [[package]]
+name = "bytemuck"
+version = "1.25.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95832e849adfb21180ccb6826a99da14e5d266ae5c2e668e1602cf234f153797"
+
+[[package]]
 name = "bytes"
 version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -549,6 +555,10 @@ name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
+
+[[package]]
+name = "fearless_simd"
+version = "1.2.0"
 
 [[package]]
 name = "find-msvc-tools"
@@ -1458,6 +1468,17 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "criterion",
+ "proptest",
+ "thiserror",
+]
+
+[[package]]
+name = "rustern-rs"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "criterion",
+ "fearless_simd",
  "proptest",
  "thiserror",
 ]

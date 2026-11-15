@@ -1,0 +1,27 @@
+[package]
+name = "rustern-rs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+# Every source file is derived from upstream go/core/rs (see NOTICE).
+license = "Apache-2.0 WITH LLVM-exception"
+description = "TernFS-compatible Reed-Solomon over GF(2^8): scalar, AVX2 and GFNI kernels"
+publish = false
+
+# No `unsafe`: the SIMD kernels use fearless_simd's safe `kernel!` (with our AVX2+GFNI token
+# patch, see third_party/README.md), so the workspace `forbid(unsafe_code)` applies.
+[lints]
+workspace = true
+
+[dependencies]
+bytemuck.workspace = true
+fearless_simd.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+proptest.workspace = true
+
+[[bench]]
+name = "rs"
+harness = false

@@ -2,6 +2,7 @@
 crates/*/fuzz/target
 crates/*/fuzz/artifacts
 crates/*/fuzz/coverage
+third_party/*/target
 
 # Local editor, agent and tool state
 /.idea/
