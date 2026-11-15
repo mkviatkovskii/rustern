@@ -112,9 +112,14 @@ this project must not repeat that.
   explicitly approved and recorded.
 - Hot-path rules: no steady-state heap allocation per request (pooled buffers); no
   copy of file data beyond the one into the kernel (zero-copy decoding, vectored I/O);
-  no lock held across an `.await`; syscalls batched where the kernel offers it;
-  SIMD selected by runtime CPU detection with a tested scalar fallback, never baked
-  in with `-march`.
+  no lock held across an `.await`; syscalls batched where the kernel offers it.
+- SIMD: a build MAY fix a baseline target CPU (`-C target-cpu`) for the whole binary,
+  only if `docs/deployment.md` states it as a hard requirement; raising it is a
+  breaking deployment change and is called out in the release notes. Instructions
+  above the baseline are selected by runtime CPU detection, never by per-crate or
+  per-function `-march`/`target_feature` without detection. Every SIMD kernel has a
+  tested scalar fallback, used on targets without the baseline (other architectures,
+  generic x86-64 builds).
 - Immutability is exploited: content of linked files may be cached and read ahead
   aggressively, within the validity rules required by Principle I.
 - No optimisation without a profile or benchmark that motivates it, and none that
@@ -274,4 +279,4 @@ or habit conflicts with it, the constitution wins or is amended.
 - Day-to-day development guidance for humans and coding agents lives in the
   repository's agent guidance file and MUST stay consistent with this document.
 
-**Version**: 1.0.3 | **Ratified**: 2026-11-14 | **Last Amended**: 2026-11-14
+**Version**: 1.1.0 | **Ratified**: 2026-11-14 | **Last Amended**: 2026-11-15

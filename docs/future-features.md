@@ -76,6 +76,11 @@ Reconstruct missing or corrupt data blocks of RS spans from parity, using an in-
 port of the upstream `rs` implementation proven bit-identical by golden vectors
 (Technology Baseline).
 
+The decoder (`crates/rustern-rs`, feature 002) is in place. Before wiring it in, restore
+upstream's single-output-row loop for recovery: a degraded read rebuilds one block, and
+our generic matrix-multiply kernels run it up to 37% slower than upstream (`tools/rsbench`,
+i9-13900K: recover D10P4 227 vs 166 µs on GFNI, D8P3 246 vs 182 µs on AVX2).
+
 ## Fewer copies and syscalls on the FUSE reply path
 
 **Origin**: 2026-11-14 benchmark discussion. **Status**: investigated; FUSE over io_uring
